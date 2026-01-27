@@ -1,0 +1,181 @@
+name: Validate and Release
+
+on:
+  push:
+    branches: [master]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [master]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON syntax
+        run: |
+          echo "Validating marketplace.json..."
+          jq . .claude-plugin/marketplace.json > /dev/null
+          echo "Validating plugin.json..."
+          jq . .claude-plugin/plugin.json > /dev/null
+
+      - name: Validate skill references
+        run: |
+          echo "Checking skill folders..."
+          jq -r '.skills[]' .claude-plugin/plugin.json | while read source; do
+            # Remove leading ./
+            clean_source="${source#./}"
+            file="${clean_source}/SKILL.md"
+            if [ ! -f "$file" ]; then
+              echo "ERROR: Missing SKILL.md: $file"
+              exit 1
+            fi
+            echo "OK: $file"
+          done
+
+      - name: Validate agent references
+        run: |
+          echo "Checking agent files..."
+          jq -r '.agents[]' .claude-plugin/plugin.json | while read source; do
+            clean_source="${source#./}"
+            file="${clean_source}.md"
+            if [ ! -f "$file" ]; then
+              echo "ERROR: Missing agent file: $file"
+              exit 1
+            fi
+            echo "OK: $file"
+          done
+
+      - name: Validate YAML frontmatter
+        run: |
+          echo "Checking YAML frontmatter in skills..."
+          find skills -name "SKILL.md" | while read file; do
+            if ! head -1 "$file" | grep -q "^---$"; then
+              echo "ERROR: Missing YAML frontmatter in $file"
+              exit 1
+            fi
+            if ! grep -q "^name:" "$file"; then
+              echo "ERROR: Missing 'name' in $file"
+              exit 1
+            fi
+            if ! grep -q "^description:" "$file"; then
+              echo "ERROR: Missing 'description' in $file"
+              exit 1
+            fi
+            echo "OK: $file"
+          done
+
+          echo "Checking YAML frontmatter in agents..."
+          for file in agents/*.md; do
+            if [ -f "$file" ]; then
+              if ! head -1 "$file" | grep -q "^---$"; then
+                echo "ERROR: Missing YAML frontmatter in $file"
+                exit 1
+              fi
+              if ! grep -q "^name:" "$file"; then
+                echo "ERROR: Missing 'name' in $file"
+                exit 1
+              fi
+              if ! grep -q "^model:" "$file"; then
+                echo "ERROR: Missing 'model' in $file"
+                exit 1
+              fi
+              echo "OK: $file"
+            fi
+          done
+
+      - name: Summary
+        run: |
+          echo "=== Marketplace Summary ==="
+          echo "Plugin version: $(jq -r '.version' .claude-plugin/plugin.json)"
+          echo "Skills: $(jq '.skills | length' .claude-plugin/plugin.json)"
+          echo "Agents: $(jq '.agents | length' .claude-plugin/plugin.json)"
+
+  release:
+    needs: validate
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        run: |
+          VERSION=$(jq -r '.version' .claude-plugin/plugin.json)
+          SKILLS=$(jq '.skills | length' .claude-plugin/plugin.json)
+          AGENTS=$(jq '.agents | length' .claude-plugin/plugin.json)
+
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          cat > notes.md << 'HEADER'
+          ## What's in this release
+
+          HEADER
+
+          echo "This release includes **$SKILLS skills** and **$AGENTS agents** for .NET development." >> notes.md
+          echo "" >> notes.md
+
+          # List skills by category
+          echo "### Skills" >> notes.md
+          echo "" >> notes.md
+
+          for category in skills/*/; do
+            if [ -d "$category" ]; then
+              category_name=$(basename "$category")
+              echo "**${category_name}**" >> notes.md
+              for skill in "$category"*/SKILL.md; do
+                if [ -f "$skill" ]; then
+                  skill_name=$(grep "^name:" "$skill" | sed 's/^name: *//')
+                  skill_desc=$(grep "^description:" "$skill" | sed 's/^description: *//')
+                  echo "- \`$skill_name\`: $skill_desc" >> notes.md
+                fi
+              done
+              echo "" >> notes.md
+            fi
+          done
+
+          # List agents
+          echo "### Agents" >> notes.md
+          echo "" >> notes.md
+          for agent in agents/*.md; do
+            if [ -f "$agent" ]; then
+              agent_name=$(grep "^name:" "$agent" | sed 's/^name: *//')
+              agent_model=$(grep "^model:" "$agent" | sed 's/^model: *//')
+              agent_desc=$(grep "^description:" "$agent" | sed 's/^description: *//' | head -c 100)
+              echo "- **$agent_name** ($agent_model): ${agent_desc}..." >> notes.md
+            fi
+          done
+          echo "" >> notes.md
+
+          # Installation
+          cat >> notes.md << 'INSTALL'
+          ## Installation
+
+          ```bash
+          # Add the marketplace
+          /plugin marketplace add Aaronontheweb/dotnet-skills
+
+          # Install the plugin (includes all skills and agents)
+          /plugin install dotnet-skills
+          ```
+          INSTALL
+
+          # Changes since last tag
+          if [ -n "$PREV_TAG" ]; then
+            echo "" >> notes.md
+            echo "## Changes since $PREV_TAG" >> notes.md
+            echo "" >> notes.md
+            git log --oneline "$PREV_TAG"..HEAD >> notes.md
+          fi
+
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: notes.md
+          generate_release_notes: false

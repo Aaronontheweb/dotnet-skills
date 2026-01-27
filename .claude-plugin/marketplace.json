@@ -1,0 +1,17 @@
+{
+  "name": "dotnet-skills",
+  "description": "Official Claude Code Marketplace for .NET development - C#, F#, Akka.NET, Aspire, testing frameworks, and specialized tools",
+  "owner": {
+    "name": "Aaron Stannard",
+    "url": "https://github.com/Aaronontheweb"
+  },
+  "repository": "https://github.com/Aaronontheweb/dotnet-skills",
+  "plugins": [
+    {
+      "name": "dotnet-skills",
+      "source": "./",
+      "version": "1.0.0",
+      "description": "Complete .NET development toolkit with 9 skills and 5 specialized agents covering Akka.NET, Aspire, testing, and modern C# patterns"
+    }
+  ]
+}

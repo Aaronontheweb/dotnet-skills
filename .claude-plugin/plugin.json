@@ -1,0 +1,28 @@
+{
+  "name": "dotnet-skills",
+  "version": "1.0.0",
+  "description": "Comprehensive .NET development skills and agents for Claude Code - covering C#, F#, Akka.NET, Aspire, testing frameworks, and specialized tools",
+  "author": {
+    "name": "Aaron Stannard",
+    "url": "https://github.com/Aaronontheweb"
+  },
+  "repository": "https://github.com/Aaronontheweb/dotnet-skills",
+  "skills": [
+    "./skills/akka/best-practices",
+    "./skills/akka/testing-patterns",
+    "./skills/akka/hosting-actor-patterns",
+    "./skills/akka/aspire-configuration",
+    "./skills/aspire/integration-testing",
+    "./skills/csharp/coding-standards",
+    "./skills/testing/testcontainers",
+    "./skills/testing/playwright-blazor",
+    "./skills/meta/marketplace-publishing"
+  ],
+  "agents": [
+    "./agents/akka-net-specialist",
+    "./agents/docfx-specialist",
+    "./agents/dotnet-benchmark-designer",
+    "./agents/dotnet-concurrency-specialist",
+    "./agents/dotnet-performance-analyst"
+  ]
+}
