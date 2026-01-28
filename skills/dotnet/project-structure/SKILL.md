@@ -35,6 +35,16 @@ The `.slnx` format is the modern XML-based solution file format introduced in .N
 | Version control | Hard to diff/merge | Easy to diff/merge |
 | Editing | IDE required | Any text editor |
 
+### Version Requirements
+
+| Tool | Minimum Version |
+|------|-----------------|
+| .NET SDK | 9.0.200 |
+| Visual Studio | 17.13 |
+| MSBuild | Visual Studio Build Tools 17.13 |
+
+**Note:** Starting with .NET 10, `dotnet new sln` creates `.slnx` files by default. In .NET 9, you must explicitly migrate or specify the format.
+
 ### Example .slnx File
 
 ```xml
@@ -58,20 +68,44 @@ The `.slnx` format is the modern XML-based solution file format introduced in .N
 
 ### Migrating from .sln to .slnx
 
+Use the `dotnet sln migrate` command to convert existing solutions:
+
 ```bash
-# Migrate existing solution (requires .NET 9+)
-dotnet sln migrate MySolution.sln
+# Migrate a specific solution file
+dotnet sln MySolution.sln migrate
+
+# Or if only one .sln exists in the directory, just run:
+dotnet sln migrate
 ```
+
+**Important:** Do not keep both `.sln` and `.slnx` files in the same repository. This causes issues with automatic solution detection and can lead to sync problems. After migration, delete the old `.sln` file.
+
+You can also migrate in Visual Studio:
+1. Open the solution
+2. Select the Solution in Solution Explorer
+3. Go to **File > Save Solution As...**
+4. Change "Save as type" to **Xml Solution File (*.slnx)**
 
 ### Creating a New .slnx Solution
 
 ```bash
-# Create new solution in slnx format
+# .NET 10+: Creates .slnx by default
+dotnet new sln --name MySolution
+
+# .NET 9: Specify the format explicitly
 dotnet new sln --name MySolution --format slnx
 
-# Add projects
+# Add projects (works the same for both formats)
 dotnet sln add src/MyApp/MyApp.csproj
 ```
+
+### Recommendation
+
+**If you're using .NET 9.0.200 or later, migrate your solutions to .slnx.** The benefits are significant:
+- Dramatically fewer merge conflicts (no random GUIDs changing)
+- Human-readable and editable in any text editor
+- Consistent with modern `.csproj` format
+- Better diff/review experience in pull requests
 
 ---
 
