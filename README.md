@@ -1,101 +1,94 @@
-# C# Coding Guides
+# .NET Skills for Claude Code
 
-A collection of comprehensive C# coding standards, best practices, and specialized knowledge for modern .NET development.
+A Claude Code plugin marketplace with comprehensive skills and specialized agents for modern .NET development.
 
-> **Note:** Claude Code marketplace coming soon - these guides will be available for easy installation directly from Claude Code!
+## Installation
+
+```bash
+# Add the marketplace (one-time)
+/plugin marketplace add Aaronontheweb/dotnet-skills
+
+# Install the plugin (includes all skills and agents)
+/plugin install dotnet-skills
+```
+
+To update to the latest version:
+```bash
+/plugin marketplace update
+```
 
 ## What's Included
 
-This repository contains **5 specialized agents** and **6 comprehensive skills** for C# and .NET development:
+This plugin includes **5 specialized agents** and **9 comprehensive skills** for C# and .NET development.
 
-**Agents:**
-- Akka.NET Specialist
-- .NET Concurrency Specialist
-- .NET Benchmark Designer
-- .NET Performance Analyst
-- DocFX Specialist
+### Agents
 
-**Skills:**
-- Modern C# Coding Standards (37KB)
-- Akka.NET Testing Patterns (38KB)
-- Akka.NET Aspire Configuration
-- .NET Aspire Integration Testing
-- Testcontainers Integration Tests
-- Playwright Blazor Testing
+| Agent | Expertise |
+|-------|-----------|
+| **akka-net-specialist** | Akka.NET architecture, actor systems, distributed computing |
+| **dotnet-concurrency-specialist** | .NET concurrency, threading, race condition analysis |
+| **dotnet-benchmark-designer** | Designing effective .NET performance benchmarks |
+| **dotnet-performance-analyst** | Analyzing .NET performance data and profiling results |
+| **docfx-specialist** | DocFX documentation system and markdown formatting |
 
-## Structure
+### Skills
 
-### Skills (`/skills`)
+#### Akka.NET (`skills/akka/`)
+- **best-practices** - EventStream vs DistributedPubSub, supervision strategies, error handling patterns
+- **testing-patterns** - Testing Akka.NET actors with Akka.Hosting.TestKit
+- **hosting-actor-patterns** - Props, IRequiredActor<T>, and dependency injection
+- **aspire-configuration** - Configuring Akka.NET with .NET Aspire
 
-Detailed guides and patterns for specific C# and .NET technologies:
+#### .NET Aspire (`skills/aspire/`)
+- **integration-testing** - Testing strategies for .NET Aspire applications
 
-- **modern-csharp-coding-standards.md** - Comprehensive modern C# best practices including records, pattern matching, value objects, async/await, Span<T>/Memory<T>, and API design
-- **akka-net-testing-patterns.md** - Complete guide to testing Akka.NET actors using Akka.Hosting.TestKit
-- **akka-net-aspire-configuration.md** - Patterns for configuring Akka.NET with .NET Aspire
-- **aspire-integration-testing.md** - Testing strategies for .NET Aspire applications
-- **testcontainers-integration-tests.md** - Using Testcontainers for integration testing in .NET
-- **playwright-blazor-testing.md** - End-to-end testing for Blazor applications with Playwright
+#### C# (`skills/csharp/`)
+- **coding-standards** - Modern C# best practices: records, pattern matching, nullable types, Span<T>
 
-### Agents (`/agents`)
+#### Testing (`skills/testing/`)
+- **testcontainers** - Using Testcontainers for .NET integration testing
+- **playwright-blazor** - End-to-end testing for Blazor with Playwright
 
-Specialized agent configurations for domain-specific expertise:
+#### Meta (`skills/meta/`)
+- **marketplace-publishing** - How to contribute to this marketplace
 
-- **akka-net-specialist.md** - Expert in Akka.NET architecture, actor systems, and distributed computing
-- **dotnet-concurrency-specialist.md** - Expert in .NET concurrency, threading, and race condition analysis
-- **dotnet-benchmark-designer.md** - Expert in designing effective .NET performance benchmarks
-- **dotnet-performance-analyst.md** - Expert in analyzing .NET application performance data
-- **docfx-specialist.md** - Expert in DocFX documentation system and markdown formatting
+## Repository Structure
+
+```
+dotnet-skills/
+├── .claude-plugin/
+│   ├── marketplace.json    # Marketplace catalog
+│   └── plugin.json         # Plugin metadata (version, skills, agents)
+├── skills/
+│   ├── akka/               # Akka.NET skills
+│   ├── aspire/             # .NET Aspire skills
+│   ├── csharp/             # C# language skills
+│   ├── testing/            # Testing framework skills
+│   └── meta/               # Meta skills
+├── agents/                 # Specialized agent definitions
+└── scripts/
+    └── validate-marketplace.sh
+```
 
 ## Key Principles
 
-These guides emphasize:
+These skills emphasize:
 
 - **Immutability by default** - Records and value objects
 - **Type safety** - Nullable reference types and strong typing
 - **Modern patterns** - Pattern matching, async/await everywhere
 - **Performance** - Zero-allocation patterns with Span<T>/Memory<T>
 - **Composition over inheritance** - Avoid abstract base classes
-- **Best-practice API design** - Accept abstractions, return appropriately specific types
 
-## Usage
+## Contributing
 
-These guides are designed to be used with AI-assisted development tools as knowledge bases for maintaining consistent coding standards across projects.
+See `skills/meta/marketplace-publishing/SKILL.md` for the full workflow.
 
-### Syncing to Claude Code
-
-Use the provided sync scripts to install all 5 agents and 6 skills to your Claude Code global configuration directory (`~/.claude`):
-
-#### Linux/Mac
-```bash
-# Full sync
-./sync.sh
-
-# Dry run (see what would happen without making changes)
-./sync.sh --dry-run
-# or
-./sync.sh -n
-```
-
-#### Windows
-```powershell
-# Full sync
-.\sync.ps1
-
-# Dry run (see what would happen without making changes)
-.\sync.ps1 -DryRun
-```
-
-**What Gets Synced:**
-- 5 specialized agents → `~/.claude/agents/`
-- 6 comprehensive skills → `~/.claude/skills/`
-- Timestamped backups created at `~/.csharp-guides-backup/[timestamp]`
-
-**Important Notes:**
-- Sync scripts create timestamped backups before making changes
-- Restart Claude Code after syncing to load new configurations
-- These are **global settings** - agents and skills will be available in all projects
-- Changes should be made in this repository, not in local `~/.claude` directories
-- Both scripts work cross-platform (tested on Linux, Mac, and Windows)
+**Quick start:**
+1. Create a skill folder: `skills/<category>/<skill-name>/SKILL.md`
+2. Add the path to `.claude-plugin/plugin.json`
+3. Run `./scripts/validate-marketplace.sh`
+4. Submit a PR
 
 ## License
 
