@@ -18,8 +18,7 @@
     "./skills/data/efcore-patterns",
     "./skills/microsoft-extensions/configuration",
     "./skills/testing/testcontainers",
-    "./skills/testing/playwright-blazor",
-    "./skills/meta/marketplace-publishing"
+    "./skills/testing/playwright-blazor"
   ],
   "agents": [
     "./agents/akka-net-specialist",
