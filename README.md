@@ -69,7 +69,9 @@ done
 
 If you're using OpenCode or another AI coding assistant, you can ask it to install these skills automatically:
 
-> Install the .NET skills from https://github.com/Aaronontheweb/dotnet-skills to my OpenCode configuration
+```
+Install the .NET skills from https://github.com/Aaronontheweb/dotnet-skills to my OpenCode configuration
+```
 
 > The AI will:
 
