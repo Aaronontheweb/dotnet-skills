@@ -5,18 +5,86 @@ A comprehensive Claude Code plugin with **25 skills** and **5 specialized agents
 ## Installation
 
 Add the marketplace (one-time):
+
 ```
 /plugin marketplace add Aaronontheweb/dotnet-skills
 ```
 
 Install the plugin:
+
 ```
 /plugin install dotnet-skills
 ```
 
 To update:
+
 ```
 /plugin marketplace update
+```
+
+---
+
+## OpenCode Installation
+
+OpenCode (https://opencode.ai/) is an open-source AI coding assistant that supports the same skill/agent format. These skills and agents are fully compatible with OpenCode.
+
+### Manual Installation
+
+#### 1.Clone the repository:
+
+```bash
+git clone https://github.com/Aaronontheweb/dotnet-skills.git
+cd dotnet-skills
+```
+
+#### 2.Install skills:
+
+```bash
+# Create OpenCode skills directory
+mkdir -p ~/.config/opencode/skills
+
+# Install each skill (skill name must match frontmatter 'name' field)
+for skill_file in $(find skills -name "SKILL.md"); do
+    skill_name=$(grep -m1 "^name:" "$skill_file" | sed 's/name: *//')
+    mkdir -p ~/.config/opencode/skills/$skill_name
+cp "$skill_file" ~/.config/opencode/skills/$skill_name/SKILL.md
+done
+```
+
+#### 3.Install agents:
+
+```bash
+# Create OpenCode agents directory
+mkdir -p ~/.config/opencode/agents
+
+# Install each agent
+for agent_file in agents/\*.md; do
+cp "$agent_file" ~/.config/opencode/agents/
+done
+```
+
+#### 4. Restart OpenCode to load the new skills and agents.
+
+### AI-Assisted Installation
+
+If you're using OpenCode or another AI coding assistant, you can ask it to install these skills automatically:
+
+> Install the .NET skills from https://github.com/Aaronontheweb/dotnet-skills to my OpenCode configuration
+
+> The AI will:
+
+```
+1. Clone the repository
+2. Extract skill names from SKILL.md frontmatter
+3. Create properly structured directories in ~/.config/opencode/skills/
+4. Copy agent files to ~/.config/opencode/agents/
+   Installed Locations
+   | Type | Location |
+   |------|----------|
+   | Skills | ~/.config/opencode/skills/<skill-name>/SKILL.md |
+   | Agents | ~/.config/opencode/agents/<agent-name>.md |
+   Compatibility Note
+   The SKILL.md and agent markdown formats follow the Agent Skills open standard (https://opencode.ai/docs/skills/), which is compatible with multiple AI coding tools including Claude Code and OpenCode.
 ```
 
 ---
@@ -25,13 +93,13 @@ To update:
 
 Agents are AI personas with deep domain expertise. They're invoked automatically when Claude Code detects relevant tasks.
 
-| Agent | Expertise |
-|-------|-----------|
-| **akka-net-specialist** | Actor systems, clustering, persistence, Akka.Streams, message patterns |
-| **dotnet-concurrency-specialist** | Threading, async/await, race conditions, deadlock analysis |
-| **dotnet-benchmark-designer** | BenchmarkDotNet setup, custom benchmarks, measurement strategies |
-| **dotnet-performance-analyst** | Profiler analysis, benchmark interpretation, regression detection |
-| **docfx-specialist** | DocFX builds, API documentation, markdown linting |
+| Agent                             | Expertise                                                              |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| **akka-net-specialist**           | Actor systems, clustering, persistence, Akka.Streams, message patterns |
+| **dotnet-concurrency-specialist** | Threading, async/await, race conditions, deadlock analysis             |
+| **dotnet-benchmark-designer**     | BenchmarkDotNet setup, custom benchmarks, measurement strategies       |
+| **dotnet-performance-analyst**    | Profiler analysis, benchmark interpretation, regression detection      |
+| **docfx-specialist**              | DocFX builds, API documentation, markdown linting                      |
 
 ---
 
@@ -41,82 +109,82 @@ Agents are AI personas with deep domain expertise. They're invoked automatically
 
 Production patterns for building distributed systems with Akka.NET.
 
-| Skill | What You'll Learn |
-|-------|-------------------|
-| **best-practices** | EventStream vs DistributedPubSub, supervision strategies, actor hierarchies |
-| **testing-patterns** | Akka.Hosting.TestKit, async assertions, TestProbe patterns |
-| **hosting-actor-patterns** | Props factories, `IRequiredActor<T>`, DI scope management in actors |
-| **aspire-configuration** | Akka.NET + .NET Aspire integration, HOCON with IConfiguration |
-| **management** | Akka.Management, health checks, cluster bootstrap |
+| Skill                      | What You'll Learn                                                           |
+| -------------------------- | --------------------------------------------------------------------------- |
+| **best-practices**         | EventStream vs DistributedPubSub, supervision strategies, actor hierarchies |
+| **testing-patterns**       | Akka.Hosting.TestKit, async assertions, TestProbe patterns                  |
+| **hosting-actor-patterns** | Props factories, `IRequiredActor<T>`, DI scope management in actors         |
+| **aspire-configuration**   | Akka.NET + .NET Aspire integration, HOCON with IConfiguration               |
+| **management**             | Akka.Management, health checks, cluster bootstrap                           |
 
 ### C# Language
 
 Modern C# patterns for clean, performant code.
 
-| Skill | What You'll Learn |
-|-------|-------------------|
-| **coding-standards** | Records, pattern matching, nullable types, value objects, no AutoMapper |
-| **concurrency-patterns** | When to use Task vs Channel vs lock vs actors |
-| **api-design** | Extend-only design, API/wire compatibility, versioning strategies |
-| **type-design-performance** | Sealed classes, readonly structs, static pure functions, Span&lt;T&gt; |
+| Skill                       | What You'll Learn                                                       |
+| --------------------------- | ----------------------------------------------------------------------- |
+| **coding-standards**        | Records, pattern matching, nullable types, value objects, no AutoMapper |
+| **concurrency-patterns**    | When to use Task vs Channel vs lock vs actors                           |
+| **api-design**              | Extend-only design, API/wire compatibility, versioning strategies       |
+| **type-design-performance** | Sealed classes, readonly structs, static pure functions, Span&lt;T&gt;  |
 
 ### Data Access
 
 Database patterns that scale.
 
-| Skill | What You'll Learn |
-|-------|-------------------|
-| **efcore-patterns** | Entity configuration, migrations, query optimization |
+| Skill                    | What You'll Learn                                               |
+| ------------------------ | --------------------------------------------------------------- |
+| **efcore-patterns**      | Entity configuration, migrations, query optimization            |
 | **database-performance** | Read/write separation, N+1 prevention, AsNoTracking, row limits |
 
 ### .NET Aspire
 
 Cloud-native application orchestration.
 
-| Skill | What You'll Learn |
-|-------|-------------------|
+| Skill                   | What You'll Learn                                            |
+| ----------------------- | ------------------------------------------------------------ |
 | **integration-testing** | DistributedApplicationTestingBuilder, Aspire.Hosting.Testing |
-| **service-defaults** | OpenTelemetry, health checks, resilience, service discovery |
+| **service-defaults**    | OpenTelemetry, health checks, resilience, service discovery  |
 
 ### ASP.NET Core
 
 Web application patterns.
 
-| Skill | What You'll Learn |
-|-------|-------------------|
+| Skill                    | What You'll Learn                                      |
+| ------------------------ | ------------------------------------------------------ |
 | **transactional-emails** | MJML templates, variable substitution, Mailpit testing |
 
 ### .NET Ecosystem
 
 Core .NET development practices.
 
-| Skill | What You'll Learn |
-|-------|-------------------|
-| **project-structure** | Solution layout, Directory.Build.props, layered architecture |
+| Skill                  | What You'll Learn                                                      |
+| ---------------------- | ---------------------------------------------------------------------- |
+| **project-structure**  | Solution layout, Directory.Build.props, layered architecture           |
 | **package-management** | Central Package Management (CPM), shared version variables, dotnet CLI |
-| **serialization** | Protobuf, MessagePack, System.Text.Json source generators, AOT |
-| **local-tools** | dotnet tool manifests, team-shared tooling |
-| **slopwatch** | Detect LLM-generated anti-patterns in your codebase |
+| **serialization**      | Protobuf, MessagePack, System.Text.Json source generators, AOT         |
+| **local-tools**        | dotnet tool manifests, team-shared tooling                             |
+| **slopwatch**          | Detect LLM-generated anti-patterns in your codebase                    |
 
 ### Microsoft.Extensions
 
 Dependency injection and configuration patterns.
 
-| Skill | What You'll Learn |
-|-------|-------------------|
-| **configuration** | IOptions pattern, environment-specific config, secrets management |
-| **dependency-injection** | IServiceCollection extensions, scope management, keyed services |
+| Skill                    | What You'll Learn                                                 |
+| ------------------------ | ----------------------------------------------------------------- |
+| **configuration**        | IOptions pattern, environment-specific config, secrets management |
+| **dependency-injection** | IServiceCollection extensions, scope management, keyed services   |
 
 ### Testing
 
 Comprehensive testing strategies.
 
-| Skill | What You'll Learn |
-|-------|-------------------|
-| **testcontainers** | Docker-based integration tests, PostgreSQL, Redis, RabbitMQ |
-| **playwright-blazor** | E2E testing for Blazor apps, page objects, async assertions |
-| **crap-analysis** | CRAP scores, coverage thresholds, ReportGenerator integration |
-| **snapshot-testing** | Verify library, approval testing, API response validation |
+| Skill                 | What You'll Learn                                             |
+| --------------------- | ------------------------------------------------------------- |
+| **testcontainers**    | Docker-based integration tests, PostgreSQL, Redis, RabbitMQ   |
+| **playwright-blazor** | E2E testing for Blazor apps, page objects, async assertions   |
+| **crap-analysis**     | CRAP scores, coverage thresholds, ReportGenerator integration |
+| **snapshot-testing**  | Verify library, approval testing, API response validation     |
 
 ---
 
