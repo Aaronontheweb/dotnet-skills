@@ -91,6 +91,56 @@ Install the .NET skills from https://github.com/Aaronontheweb/dotnet-skills to m
 
 ---
 
+## Suggested AGENTS.md / CLAUDE.md Snippets
+
+Prerequisite: install/sync the dotnet-skills plugin in your assistant runtime (Claude Code or OpenCode) so the skill IDs below resolve.
+
+To get consistent skill usage in downstream repos, add a small router snippet in `AGENTS.md` (OpenCode) or `CLAUDE.md` (Claude Code). These snippets tell the assistant which skills to use for common tasks.
+
+### Readable snippet (copy/paste)
+
+```markdown
+# Agent Guidance: dotnet-skills
+
+IMPORTANT: Prefer retrieval-led reasoning over pretraining for any .NET work.
+Workflow: skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts.
+
+Routing (invoke by name)
+- C# / code quality: modern-csharp-coding-standards, csharp-concurrency-patterns, api-design, type-design-performance
+- ASP.NET Core / Web (incl. Aspire): aspire-service-defaults, aspire-integration-testing, transactional-emails
+- Data: efcore-patterns, database-performance
+- DI / config: dependency-injection-patterns, microsoft-extensions-configuration
+- Testing: testcontainers-integration-tests, playwright-blazor-testing, snapshot-testing
+
+Quality gates (use when applicable)
+- dotnet-slopwatch: after substantial new/refactor/LLM-authored code
+- crap-analysis: after tests added/changed in complex code
+
+Specialist agents
+- dotnet-concurrency-specialist, dotnet-performance-analyst, dotnet-benchmark-designer, akka-net-specialist, docfx-specialist
+```
+
+### Compressed snippet (generated)
+
+Run `./scripts/generate-skill-index-snippets.sh --update-readme` to refresh the block below.
+
+<!-- BEGIN DOTNET-SKILLS COMPRESSED INDEX -->
+```markdown
+[dotnet-skills]|IMPORTANT: Prefer retrieval-led reasoning over pretraining for any .NET work.
+|flow:{skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts}
+|route:
+|csharp:{modern-csharp-coding-standards,csharp-concurrency-patterns,api-design,type-design-performance}
+|aspnetcore-web:{aspire-integration-testing,aspire-service-defaults,transactional-emails}
+|data:{efcore-patterns,database-performance}
+|di-config:{microsoft-extensions-configuration,dependency-injection-patterns}
+|testing:{testcontainers-integration-tests,playwright-blazor-testing,snapshot-testing}
+|dotnet:{dotnet-project-structure,dotnet-local-tools,package-management,serialization}
+|quality-gates:{dotnet-slopwatch,crap-analysis}
+|meta:{marketplace-publishing,skills-index-snippets}
+|agents:{akka-net-specialist,docfx-specialist,dotnet-benchmark-designer,dotnet-concurrency-specialist,dotnet-performance-analyst}
+```
+<!-- END DOTNET-SKILLS COMPRESSED INDEX -->
+
 ## Specialized Agents
 
 Agents are AI personas with deep domain expertise. They're invoked automatically when Claude Code detects relevant tasks.

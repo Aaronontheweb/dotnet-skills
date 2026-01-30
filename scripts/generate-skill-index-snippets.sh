@@ -8,6 +8,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 PLUGIN_JSON="$REPO_ROOT/.claude-plugin/plugin.json"
+README_PATH="$REPO_ROOT/README.md"
+
+UPDATE_README=false
+if [[ "${1-}" == "--update-readme" ]]; then
+  UPDATE_README=true
+fi
 
 skill_name_from_dir() {
   local dir="$1"
@@ -57,7 +63,7 @@ join_csv() {
   echo "$*"
 }
 
-cat <<EOF
+compressed="$(cat <<EOF
 [dotnet-skills]|IMPORTANT: Prefer retrieval-led reasoning over pretraining for any .NET work.
 |flow:{skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts}
 |route:
@@ -71,3 +77,31 @@ cat <<EOF
 |meta:{$(join_csv "${meta[@]}")}
 |agents:{$(join_csv "${agents[@]}")}
 EOF
+)"
+
+if $UPDATE_README; then
+  COMPRESSED="$compressed" README_PATH="$README_PATH" python - <<'PY'
+import os
+import pathlib
+import re
+import sys
+
+readme_path = pathlib.Path(os.environ["README_PATH"])
+start = "<!-- BEGIN DOTNET-SKILLS COMPRESSED INDEX -->"
+end = "<!-- END DOTNET-SKILLS COMPRESSED INDEX -->"
+compressed = os.environ["COMPRESSED"].strip()
+
+text = readme_path.read_text(encoding="utf-8")
+pattern = re.compile(re.escape(start) + r".*?" + re.escape(end), re.S)
+
+if not pattern.search(text):
+    sys.stderr.write("README markers not found: add BEGIN/END DOTNET-SKILLS COMPRESSED INDEX\n")
+    sys.exit(1)
+
+replacement = f"{start}\n```markdown\n{compressed}\n```\n{end}"
+updated = pattern.sub(replacement, text)
+readme_path.write_text(updated, encoding="utf-8")
+PY
+else
+  printf '%s\n' "$compressed"
+fi

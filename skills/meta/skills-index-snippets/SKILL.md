@@ -75,6 +75,22 @@ Use this when you want maximum density (small context footprint):
 |agents:{dotnet-concurrency-specialist,dotnet-performance-analyst,dotnet-benchmark-designer,akka-net-specialist,docfx-specialist}
 ```
 
+### Regenerating the README block
+
+If the README contains the markers below, the generator can update it automatically:
+
+```
+<!-- BEGIN DOTNET-SKILLS COMPRESSED INDEX -->
+...compressed snippet...
+<!-- END DOTNET-SKILLS COMPRESSED INDEX -->
+```
+
+Run:
+
+```bash
+./scripts/generate-skill-index-snippets.sh --update-readme
+```
+
 ## How to Update Snippets After Skill Changes
 
 1. Update `.claude-plugin/plugin.json` to include/remove skills and agents.
