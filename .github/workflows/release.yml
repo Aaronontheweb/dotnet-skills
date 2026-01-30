@@ -40,7 +40,11 @@ jobs:
           echo "Checking agent files..."
           jq -r '.agents[]' .claude-plugin/plugin.json | while read source; do
             clean_source="${source#./}"
-            file="${clean_source}.md"
+            if [[ "$clean_source" == *.md ]]; then
+              file="$clean_source"
+            else
+              file="${clean_source}.md"
+            fi
             if [ ! -f "$file" ]; then
               echo "ERROR: Missing agent file: $file"
               exit 1
@@ -78,8 +82,8 @@ jobs:
                 echo "ERROR: Missing 'name' in $file"
                 exit 1
               fi
-              if ! grep -q "^model:" "$file"; then
-                echo "ERROR: Missing 'model' in $file"
+              if ! grep -q "^description:" "$file"; then
+                echo "ERROR: Missing 'description' in $file"
                 exit 1
               fi
               echo "OK: $file"
@@ -146,7 +150,8 @@ jobs:
           for agent in agents/*.md; do
             if [ -f "$agent" ]; then
               agent_name=$(grep "^name:" "$agent" | sed 's/^name: *//')
-              agent_model=$(grep "^model:" "$agent" | sed 's/^model: *//')
+              agent_model=$(grep "^model:" "$agent" | sed 's/^model: *//' || true)
+              if [ -z "$agent_model" ]; then agent_model="default"; fi
               agent_desc=$(grep "^description:" "$agent" | sed 's/^description: *//' | head -c 100)
               echo "- **$agent_name** ($agent_model): ${agent_desc}..." >> notes.md
             fi
