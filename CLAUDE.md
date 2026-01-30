@@ -57,12 +57,20 @@ color: purple  # optional
 3. Run `./scripts/validate-marketplace.sh` to verify
 4. Commit both changes together
 
+After adding/removing skills, update the downstream snippet/router indexes:
+- See `skills/meta/skills-index-snippets/SKILL.md`
+- Regenerate the compressed index with `./scripts/generate-skill-index-snippets.sh`
+
 ## Adding New Agents
 
 1. Create the agent file: `agents/<agent-name>.md`
 2. Add the agent path to `.claude-plugin/plugin.json` in the `agents` array
 3. Run `./scripts/validate-marketplace.sh` to verify
 4. Commit both changes together
+
+After adding/removing agents, update the downstream snippet/router indexes:
+- See `skills/meta/skills-index-snippets/SKILL.md`
+- Regenerate the compressed index with `./scripts/generate-skill-index-snippets.sh`
 
 ## Marketplace Publishing
 
@@ -85,3 +93,9 @@ See `skills/meta/marketplace-publishing/SKILL.md` for detailed workflow.
 - Include concrete code examples with modern C# patterns
 - Reference authoritative sources rather than duplicating content
 - Agents define personas with expertise areas and diagnostic approaches
+
+## Router / Index Snippets
+
+When skills/agents change, keep the copy/paste snippet indexes up to date:
+- See `skills/meta/skills-index-snippets/SKILL.md`
+- Generate a compressed index with `./scripts/generate-skill-index-snippets.sh`

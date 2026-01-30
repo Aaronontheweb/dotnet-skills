@@ -11,7 +11,7 @@
       "name": "dotnet-skills",
       "source": "./",
       "version": "1.0.0",
-      "description": "Complete .NET development toolkit with 9 skills and 5 specialized agents covering Akka.NET, Aspire, testing, and modern C# patterns"
+      "description": "Complete .NET development toolkit with 27 skills and 5 specialized agents covering Akka.NET, Aspire, testing, and modern C# patterns"
     }
   ]
 }

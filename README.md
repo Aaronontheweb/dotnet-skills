@@ -1,6 +1,6 @@
 # .NET Skills for Claude Code
 
-A comprehensive Claude Code plugin with **25 skills** and **5 specialized agents** for professional .NET development. Battle-tested patterns from production systems covering C#, Akka.NET, Aspire, EF Core, testing, and performance optimization.
+A comprehensive Claude Code plugin with **27 skills** and **5 specialized agents** for professional .NET development. Battle-tested patterns from production systems covering C#, Akka.NET, Aspire, EF Core, testing, and performance optimization.
 
 ## Installation
 
