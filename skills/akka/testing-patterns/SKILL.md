@@ -519,7 +519,119 @@ public class OrderPersistentActorTests : TestKit
 
 ---
 
-## Pattern 5: Testing Cluster Sharding Locally
+## Pattern 5: Reuse Production Configuration Extension Methods
+
+When your production code uses custom `AkkaConfigurationBuilder` extension methods (for serializers, actors, persistence), your tests should use those same extension methods rather than duplicating HOCON configuration.
+
+### Anti-Pattern: Duplicated Configuration
+
+```csharp
+// BAD: Duplicating HOCON config that already exists in an extension method
+public class DraftSerializerTests : Akka.TestKit.Xunit2.TestKit
+{
+    public DraftSerializerTests() : base(ConfigurationFactory.ParseString(@"
+        akka.actor {
+            serializers {
+                proto = ""MyApp.Serialization.DraftSerializer, MyApp""
+            }
+            serialization-bindings {
+                ""MyApp.Messages.IDraftEvent, MyApp"" = proto
+                ""MyApp.Actors.DraftState, MyApp"" = proto
+            }
+        }
+    "))
+    { }
+}
+```
+
+**Problems with duplicated config:**
+- Two places to update when bindings change
+- Tests can pass while production fails (or vice versa)
+- Easy to forget to add new bindings to tests
+- Doesn't actually test the extension method itself
+
+### Correct Pattern: Reuse Extension Methods
+
+```csharp
+// Production extension method (in your main project)
+public static class AkkaSerializerExtensions
+{
+    public static AkkaConfigurationBuilder AddDraftSerializer(
+        this AkkaConfigurationBuilder builder)
+    {
+        return builder.WithCustomSerializer(
+            serializerIdentifier: "draft-proto",
+            boundTypes: [typeof(IDraftEvent), typeof(DraftState)],
+            serializerFactory: system => new DraftSerializer(system));
+    }
+}
+
+// GOOD: Test reuses the same extension method
+public class DraftSerializerTests : Akka.Hosting.TestKit.TestKit
+{
+    public DraftSerializerTests(ITestOutputHelper output) : base(output: output) { }
+
+    protected override void ConfigureAkka(AkkaConfigurationBuilder builder, IServiceProvider provider)
+    {
+        // Use the SAME extension method as production
+        builder.AddDraftSerializer();
+
+        // Add test-specific config (in-memory persistence, etc.)
+        builder.WithInMemoryJournal()
+            .WithInMemorySnapshotStore();
+    }
+
+    [Fact]
+    public async Task DraftSerializer_RoundTrips_DraftCreatedEvent()
+    {
+        // Arrange
+        var original = new DraftCreated(DraftId.New(), "Test Draft", DateTime.UtcNow);
+
+        // Act - serialize and deserialize through the actor system
+        var serializer = Sys.Serialization.FindSerializerFor(original);
+        var bytes = serializer.ToBinary(original);
+        var deserialized = serializer.FromBinary(bytes, typeof(DraftCreated));
+
+        // Assert
+        deserialized.Should().BeEquivalentTo(original);
+    }
+}
+```
+
+### Benefits
+
+| Benefit | Explanation |
+|---------|-------------|
+| **DRY** | Single source of truth for configuration |
+| **No Drift** | Tests always use the exact same config as production |
+| **Easier Maintenance** | Add a new binding in one place, tests automatically pick it up |
+| **Better Coverage** | Actually tests the extension method itself |
+| **Catches Real Bugs** | If the extension method is broken, tests fail |
+
+### Applying to Other Configurations
+
+This pattern applies to any `AkkaConfigurationBuilder` extension method:
+
+```csharp
+protected override void ConfigureAkka(AkkaConfigurationBuilder builder, IServiceProvider provider)
+{
+    // Reuse production extension methods
+    builder
+        .AddDraftSerializer()           // Custom serializer
+        .AddOrderDomainActors(AkkaExecutionMode.LocalTest)  // Domain actors
+        .AddCustomPersistence()         // Persistence config
+        .AddReminders();                // Reminder system
+
+    // Override only what's test-specific
+    builder
+        .WithInMemoryJournal()          // Replace real DB with in-memory
+        .WithInMemorySnapshotStore();
+}
+```
+
+---
+
+## Pattern 6: Testing Cluster Sharding Locally
 
 Use `AkkaExecutionMode.LocalTest` to test cluster sharding behavior without an actual cluster.
 

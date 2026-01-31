@@ -324,59 +324,160 @@ public class UIIntegrationTests
 }
 ```
 
-## Pattern 6: Conditional Volume Configuration in AppHost
+## Pattern 6: Conditional Resource Configuration for Tests
 
-Design your AppHost to support test scenarios by making volumes optional:
+Design your AppHost to support different configurations for interactive development (F5/CLI) vs automated test fixtures. The pattern goes beyond just volumes - it covers execution modes, authentication, external services, and more.
+
+### Core Principle
+
+> **Default to production-like behavior in AppHost.** Tests explicitly override what they need to be different. This catches configuration gaps early (e.g., missing DI registrations that only surface in clustered mode).
+
+### Configuration Class in AppHost
 
 ```csharp
-// In your AppHost Program.cs
-public class AppConfiguration
+// In your AppHost project
+public class AppHostConfiguration
 {
-    /// <summary>
-    /// Whether to use persistent volumes for databases.
-    /// Defaults to false - tests get a clean database each run.
-    /// </summary>
-    public bool UseVolumes { get; set; } = false;
+    // Infrastructure settings
+    public bool UseVolumes { get; set; } = true;  // Persist data in dev, clean slate in tests
 
-    public string Environment { get; set; } = "Development";
+    // Execution mode settings (for Akka.NET or similar)
+    public string ExecutionMode { get; set; } = "Clustered";  // Full cluster in dev, LocalTest optional
+
+    // Feature toggles
+    public bool EnableTestAuth { get; set; } = false;  // /dev-login endpoint for tests
+    public bool UseFakeExternalServices { get; set; } = false;  // Fake Gmail, Stripe, etc.
+
+    // Scale settings
     public int Replicas { get; set; } = 1;
 }
+```
 
+### AppHost Conditional Logic
+
+```csharp
 var builder = DistributedApplication.CreateBuilder(args);
 
 // Bind configuration from command-line args or appsettings
-var config = builder.Configuration.GetSection("YourApp")
-    .Get<AppConfiguration>() ?? new AppConfiguration();
+var config = builder.Configuration.GetSection("App")
+    .Get<AppHostConfiguration>() ?? new AppHostConfiguration();
 
+// Database with conditional volume
 var postgres = builder.AddPostgres("postgres").WithPgAdmin();
-
-// Only persist data when explicitly enabled (not during tests)
 if (config.UseVolumes)
 {
     postgres.WithDataVolume();
 }
-
 var db = postgres.AddDatabase("appdb");
 
-// Migrations run first
+// Migrations
 var migrations = builder.AddProject<Projects.YourApp_Migrations>("migrations")
     .WaitFor(db)
     .WithReference(db);
 
-// API waits for migrations to complete
+// API with environment-based configuration
 var api = builder.AddProject<Projects.YourApp_Api>("api")
     .WaitForCompletion(migrations)
-    .WithReference(db);
+    .WithReference(db)
+    .WithEnvironment("AkkaSettings__ExecutionMode", config.ExecutionMode)
+    .WithEnvironment("Testing__EnableTestAuth", config.EnableTestAuth.ToString())
+    .WithEnvironment("ExternalServices__UseFakes", config.UseFakeExternalServices.ToString());
+
+// Conditional replicas
+if (config.Replicas > 1)
+{
+    api.WithReplicas(config.Replicas);
+}
+
+builder.Build().Run();
 ```
 
-**Then in tests, pass `UseVolumes=false`:**
+### Test Fixture Overrides
 
 ```csharp
 var builder = await DistributedApplicationTestingBuilder
     .CreateAsync<Projects.YourApp_AppHost>([
-        "YourApp:UseVolumes=false"  // Clean database each test run
+        "App:UseVolumes=false",           // Clean database each test
+        "App:ExecutionMode=LocalTest",    // Faster, no cluster overhead (optional)
+        "App:EnableTestAuth=true",        // Enable /dev-login endpoint
+        "App:UseFakeExternalServices=true" // No real OAuth, email, payments
     ]);
 ```
+
+### Common Conditional Settings
+
+| Setting | F5/Development | Test Fixture | Purpose |
+|---------|----------------|--------------|---------|
+| `UseVolumes` | `true` (persist data) | `false` (clean slate) | Database isolation |
+| `ExecutionMode` | `Clustered` (realistic) | `LocalTest` or `Clustered` | Actor system mode |
+| `EnableTestAuth` | `false` (use real OAuth) | `true` (/dev-login) | Bypass OAuth in tests |
+| `UseFakeServices` | `false` (real integrations) | `true` (no external calls) | External API isolation |
+| `Replicas` | `1` or more | `1` (simplicity) | Scale configuration |
+| `SeedData` | `false` | `true` | Pre-populate test data |
+
+### Test Authentication Pattern
+
+When `EnableTestAuth=true`, your API can expose a test-only authentication endpoint:
+
+```csharp
+// In API startup, conditionally add test auth
+if (builder.Configuration.GetValue<bool>("Testing:EnableTestAuth"))
+{
+    app.MapPost("/dev-login", async (DevLoginRequest request, IAuthService auth) =>
+    {
+        // Generate a real auth token for the specified user
+        var token = await auth.GenerateTokenAsync(request.UserId, request.Roles);
+        return Results.Ok(new { token });
+    });
+}
+
+// In tests
+public async Task<string> LoginAsTestUser(string userId, string[] roles)
+{
+    var response = await _httpClient.PostAsJsonAsync("/dev-login",
+        new { UserId = userId, Roles = roles });
+    var result = await response.Content.ReadFromJsonAsync<DevLoginResponse>();
+    return result!.Token;
+}
+```
+
+### Fake External Services Pattern
+
+```csharp
+// In your service registration
+public static IServiceCollection AddExternalServices(
+    this IServiceCollection services,
+    IConfiguration config)
+{
+    if (config.GetValue<bool>("ExternalServices:UseFakes"))
+    {
+        // Test fakes - no external calls
+        services.AddSingleton<IEmailSender, FakeEmailSender>();
+        services.AddSingleton<IPaymentProcessor, FakePaymentProcessor>();
+        services.AddSingleton<IOAuthProvider, FakeOAuthProvider>();
+    }
+    else
+    {
+        // Real implementations
+        services.AddSingleton<IEmailSender, SendGridEmailSender>();
+        services.AddSingleton<IPaymentProcessor, StripePaymentProcessor>();
+        services.AddSingleton<IOAuthProvider, Auth0Provider>();
+    }
+
+    return services;
+}
+```
+
+### Why Default to Production-Like Behavior
+
+Starting with production-like defaults and overriding in tests catches issues that only appear under real conditions:
+
+- **DI registration gaps** - Services that are only registered in clustered mode
+- **Configuration errors** - Settings that are required in production but missing
+- **Integration issues** - Problems with real database connections, auth flows, etc.
+- **Performance characteristics** - Tests run closer to production behavior
+
+Tests explicitly opt-out of specific production behaviors rather than opting-in to a test mode that might miss real issues.
 
 ## Pattern 7: Database Reset with Respawn
 

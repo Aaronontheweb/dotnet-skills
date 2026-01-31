@@ -508,6 +508,98 @@ For more on DI lifetimes and scope management, see `microsoft-extensions/depende
 
 ---
 
+## Cluster Sharding Configuration
+
+### RememberEntities: Almost Always False
+
+`RememberEntities` controls whether the shard region remembers and automatically restarts all entities that were ever created. **This should almost always be `false`.**
+
+```csharp
+builder.WithShardRegion<OrderActor>(
+    "orders",
+    (system, registry, resolver) => entityId => resolver.Props<OrderActor>(entityId),
+    new OrderMessageExtractor(),
+    new ShardOptions
+    {
+        StateStoreMode = StateStoreMode.DData,
+        RememberEntities = false,  // DEFAULT - almost always correct
+        Role = clusterRole
+    });
+```
+
+**When `RememberEntities = true` causes problems:**
+
+| Problem | Explanation |
+|---------|-------------|
+| **Unbounded memory growth** | Every entity ever created gets remembered and restarted forever |
+| **Slow cluster startup** | Cluster must restart thousands/millions of entities on boot |
+| **Stale entity resurrection** | Expired sessions, sent emails, old orders all get restarted |
+| **No passivation** | Idle entities consume memory indefinitely (passivation is disabled) |
+
+### When to Use Each Setting
+
+| Entity Type | RememberEntities | Reason |
+|-------------|------------------|--------|
+| `UserSessionActor` | **false** | Sessions expire, created on login |
+| `DraftActor` | **false** | Drafts are sent/discarded, ephemeral |
+| `EmailSenderActor` | **false** | Fire-and-forget operations |
+| `OrderActor` | **false** | Orders complete, new ones created constantly |
+| `ShoppingCartActor` | **false** | Carts expire, abandoned carts common |
+| `TenantActor` | *maybe true* | Fixed set of tenants, always needed |
+| `AccountActor` | *maybe true* | Bounded set of accounts, long-lived |
+
+**Rule of thumb:** Use `RememberEntities = true` only for:
+1. **Bounded** entity sets (known upper limit)
+2. **Long-lived** domain entities that should always be available
+3. Entities where the **cost of remembering < cost of lazy creation**
+
+### Marker Types with WithShardRegion<T>
+
+When using `WithShardRegion<T>`, the generic parameter `T` serves as a marker type for the `ActorRegistry`. Use a dedicated marker type (not the actor class itself) for consistent registry access:
+
+```csharp
+/// <summary>
+/// Marker type for ActorRegistry. Use this to retrieve the OrderActor shard region.
+/// </summary>
+public sealed class OrderActorRegion;
+
+// Registration - use marker type as generic parameter
+builder.WithShardRegion<OrderActorRegion>(
+    "orders",
+    (system, registry, resolver) => entityId => resolver.Props<OrderActor>(entityId),
+    new OrderMessageExtractor(),
+    new ShardOptions { StateStoreMode = StateStoreMode.DData });
+
+// Retrieval - same marker type
+var orderRegion = ActorRegistry.Get<OrderActorRegion>();
+orderRegion.Tell(new CreateOrder(orderId, amount));
+```
+
+**Why marker types?**
+- `WithShardRegion<T>` auto-registers the shard region under type `T`
+- Using the actor class directly can cause confusion (registry returns region, not actor)
+- Marker types make the intent explicit and work consistently in both LocalTest and Clustered modes
+
+### Avoiding Redundant Registry Calls
+
+`WithShardRegion<T>` automatically registers the shard region in the `ActorRegistry`. Don't call `registry.Register<T>()` again:
+
+```csharp
+// BAD - redundant registration
+builder.WithShardRegion<OrderActorRegion>("orders", ...)
+    .WithActors((system, registry, resolver) =>
+    {
+        var region = registry.Get<OrderActorRegion>();
+        registry.Register<OrderActorRegion>(region);  // UNNECESSARY!
+    });
+
+// GOOD - WithShardRegion already registers
+builder.WithShardRegion<OrderActorRegion>("orders", ...);
+// That's it - OrderActorRegion is now in the registry
+```
+
+---
+
 ## Best Practices
 
 1. **Always support both execution modes** - Makes testing easy without code changes
@@ -518,3 +610,4 @@ For more on DI lifetimes and scope management, see `microsoft-extensions/depende
 6. **Composition over inheritance** - Chain extension methods, don't create deep hierarchies
 7. **ITimeProvider for scheduling** - Never use `DateTime.Now` directly in actors
 8. **akka-reminders for durability** - Use for scheduled tasks that must survive restarts
+9. **RememberEntities = false by default** - Only set to true for bounded, long-lived entities
