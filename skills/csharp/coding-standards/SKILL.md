@@ -604,6 +604,16 @@ public void FormatMessage()
     var message = new string(buffer.Slice(0, written));
 }
 
+// SkipLocalsInit with stackalloc and Span<T>
+using System.Runtime.CompilerServices;
+[SkipLocalsInit]
+public void FormatMessage()
+{
+    Span<char> buffer = stackalloc char[256];
+    var written = FormatInto(buffer);
+    var message = new string(buffer.Slice(0, written));
+}
+
 // ✅ GOOD: Memory<T> for async operations (Span can't cross await)
 public async Task<int> ReadDataAsync(
     Memory<byte> buffer,
