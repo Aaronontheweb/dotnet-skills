@@ -8,10 +8,58 @@
   "repository": "https://github.com/Aaronontheweb/dotnet-skills",
   "plugins": [
     {
-      "name": "dotnet-skills",
-      "source": "./",
+      "name": "akka",
+      "source": "./plugins/akka",
       "version": "1.0.0",
-      "description": "Complete .NET development toolkit with 27 skills and 5 specialized agents covering Akka.NET, Aspire, testing, and modern C# patterns"
+      "description": "Akka.NET actor systems, clustering, persistence, and testing patterns"
+    },
+    {
+      "name": "aspire",
+      "source": "./plugins/aspire",
+      "version": "1.0.0",
+      "description": ".NET Aspire cloud-native orchestration and integration testing"
+    },
+    {
+      "name": "aspnetcore",
+      "source": "./plugins/aspnetcore",
+      "version": "1.0.0",
+      "description": "ASP.NET Core web application patterns"
+    },
+    {
+      "name": "csharp",
+      "source": "./plugins/csharp",
+      "version": "1.0.0",
+      "description": "Modern C# language patterns and best practices"
+    },
+    {
+      "name": "data",
+      "source": "./plugins/data",
+      "version": "1.0.0",
+      "description": "EF Core and database performance patterns"
+    },
+    {
+      "name": "dotnet",
+      "source": "./plugins/dotnet",
+      "version": "1.0.0",
+      "description": "Core .NET development practices and tooling"
+    },
+    {
+      "name": "meta",
+      "source": "./plugins/meta",
+      "version": "1.0.0",
+      "description": "Marketplace publishing and skill index management"
+    },
+    {
+      "name": "microsoft-extensions",
+      "source": "./plugins/microsoft-extensions",
+      "version": "1.0.0",
+      "description": "Dependency injection and configuration patterns"
+    },
+    {
+      "name": "testing",
+      "source": "./plugins/testing",
+      "version": "1.0.0",
+      "description": "Testing frameworks, TestContainers, Playwright, and analysis"
     }
   ]
 }

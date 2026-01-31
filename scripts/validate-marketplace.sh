@@ -1,5 +1,5 @@
 #!/bin/bash
-# Validates that plugin.json is consistent with actual skill/agent files
+# Validates that marketplace.json plugins are consistent with actual skill/agent files
 
 set -e
 
@@ -15,6 +15,8 @@ NC='\033[0m' # No Color
 
 errors=0
 warnings=0
+total_skills=0
+total_agents=0
 
 echo "Validating marketplace structure..."
 echo ""
@@ -32,108 +34,79 @@ if ! jq . "$PLUGIN_JSON" > /dev/null 2>&1; then
 fi
 echo -e "${GREEN}plugin.json syntax: OK${NC}"
 
-# Check skill references (now folders with SKILL.md)
+# Iterate through each plugin in marketplace.json
 echo ""
-echo "Checking skills..."
-while IFS= read -r source; do
+echo "Checking plugins..."
+while IFS= read -r plugin_entry; do
+    plugin_name=$(echo "$plugin_entry" | jq -r '.name')
+    plugin_source=$(echo "$plugin_entry" | jq -r '.source')
+
     # Remove leading ./ if present
-    clean_source="${source#./}"
-    file="$REPO_ROOT/${clean_source}/SKILL.md"
+    clean_source="${plugin_source#./}"
+    plugin_dir="$REPO_ROOT/$clean_source"
 
-    if [ ! -f "$file" ]; then
-        echo -e "${RED}ERROR: Missing SKILL.md for: $source${NC}"
-        echo -e "${RED}       Expected: $file${NC}"
+    echo ""
+    echo "=== Plugin: $plugin_name ==="
+
+    if [ ! -d "$plugin_dir" ]; then
+        echo -e "${RED}ERROR: Plugin directory not found: $plugin_dir${NC}"
         ((++errors))
-    else
-        # Extract skill name from SKILL.md frontmatter
-        skill_name=$(grep "^name:" "$file" | head -1 | sed 's/^name: *//')
-        echo -e "${GREEN}OK: $skill_name ($source)${NC}"
+        continue
     fi
-done < <(jq -r '.skills[]' "$PLUGIN_JSON")
 
-# Check agent references
-echo ""
-echo "Checking agents..."
-agents_value=$(jq -r '.agents' "$PLUGIN_JSON")
-agents_type=$(jq -r '.agents | type' "$PLUGIN_JSON")
-
-if [ "$agents_type" = "string" ]; then
-    # agents is a directory path
-    clean_dir="${agents_value#./}"
-    agents_dir="$REPO_ROOT/${clean_dir}"
-
-    if [ ! -d "$agents_dir" ]; then
-        echo -e "${RED}ERROR: Missing agents directory: $agents_dir${NC}"
+    # Check plugin.json exists and is valid
+    plugin_config="$plugin_dir/.claude-plugin/plugin.json"
+    if [ ! -f "$plugin_config" ]; then
+        echo -e "${RED}ERROR: Missing plugin.json: $plugin_config${NC}"
+        ((++errors))
+    elif ! jq . "$plugin_config" > /dev/null 2>&1; then
+        echo -e "${RED}ERROR: Invalid JSON syntax in $plugin_config${NC}"
         ((++errors))
     else
-        for file in "$agents_dir"/*.md; do
-            if [ -f "$file" ]; then
-                agent_name=$(grep "^name:" "$file" | head -1 | sed 's/^name: *//')
-                echo -e "${GREEN}OK: $agent_name${NC}"
+        echo -e "${GREEN}  plugin.json: OK${NC}"
+    fi
+
+    # Check skills in this plugin
+    skills_dir="$plugin_dir/skills"
+    if [ -d "$skills_dir" ]; then
+        skill_count=0
+        for skill_path in "$skills_dir"/*/SKILL.md; do
+            if [ -f "$skill_path" ]; then
+                skill_name=$(grep "^name:" "$skill_path" | head -1 | sed 's/^name: *//')
+                echo -e "${GREEN}  Skill: $skill_name${NC}"
+                ((++skill_count))
+                ((++total_skills))
             fi
         done
+        echo "  Skills found: $skill_count"
+    else
+        echo -e "${YELLOW}  No skills directory${NC}"
     fi
-elif [ "$agents_type" = "array" ]; then
-    # agents is an array of paths (with .md extension)
-    while IFS= read -r source; do
-        # Remove leading ./ if present
-        clean_source="${source#./}"
-        file="$REPO_ROOT/${clean_source}"
 
-        if [ ! -f "$file" ]; then
-            echo -e "${RED}ERROR: Missing agent file: $file${NC}"
-            ((++errors))
-        else
-            agent_name=$(grep "^name:" "$file" | head -1 | sed 's/^name: *//')
-            echo -e "${GREEN}OK: $agent_name${NC}"
-        fi
-    done < <(jq -r '.agents[]' "$PLUGIN_JSON")
-fi
-
-# Check for unregistered skills (find all SKILL.md files)
-echo ""
-echo "Checking for unregistered skills..."
-while IFS= read -r file; do
-    # Get the directory containing SKILL.md relative to repo root
-    skill_dir=$(dirname "$file" | sed "s|$REPO_ROOT/||")
-    source="./$skill_dir"
-
-    if ! jq -e --arg src "$source" '.skills[] | select(. == $src)' "$PLUGIN_JSON" > /dev/null 2>&1; then
-        echo -e "${YELLOW}WARNING: Skill not in plugin.json: $source${NC}"
-        ((++warnings))
-    fi
-done < <(find "$REPO_ROOT/skills" -name "SKILL.md" 2>/dev/null)
-
-# Check for unregistered agents
-echo ""
-echo "Checking for unregistered agents..."
-if [ "$agents_type" = "string" ]; then
-    # When agents is a directory, all .md files in that directory are automatically included
-    echo -e "${GREEN}Using directory mode: all agents in ${agents_value} are included${NC}"
-elif [ "$agents_type" = "array" ]; then
-    for file in "$REPO_ROOT"/agents/*.md; do
-        if [ -f "$file" ]; then
-            basename=$(basename "$file")
-            source="./agents/$basename"
-            if ! jq -e --arg src "$source" '.agents[] | select(. == $src)' "$PLUGIN_JSON" > /dev/null 2>&1; then
-                echo -e "${YELLOW}WARNING: Agent file not in plugin.json: $basename${NC}"
-                ((++warnings))
+    # Check agents in this plugin
+    agents_dir="$plugin_dir/agents"
+    if [ -d "$agents_dir" ]; then
+        agent_count=0
+        for agent_path in "$agents_dir"/*.md; do
+            if [ -f "$agent_path" ]; then
+                agent_name=$(grep "^name:" "$agent_path" | head -1 | sed 's/^name: *//')
+                echo -e "${GREEN}  Agent: $agent_name${NC}"
+                ((++agent_count))
+                ((++total_agents))
             fi
-        fi
-    done
-fi
+        done
+        echo "  Agents found: $agent_count"
+    fi
+
+done < <(jq -c '.plugins[]' "$MARKETPLACE_JSON")
 
 # Summary
 echo ""
 echo "=== Summary ==="
-echo "Skills registered: $(jq '.skills | length' "$PLUGIN_JSON")"
-if [ "$agents_type" = "string" ]; then
-    agents_count=$(find "$agents_dir" -name "*.md" 2>/dev/null | wc -l)
-    echo "Agents registered: $agents_count (directory mode: $agents_value)"
-else
-    echo "Agents registered: $(jq '.agents | length' "$PLUGIN_JSON")"
-fi
-echo "Plugin version: $(jq -r '.version' "$PLUGIN_JSON")"
+echo "Plugins: $(jq '.plugins | length' "$MARKETPLACE_JSON")"
+echo "Total skills: $total_skills"
+echo "Total agents: $total_agents"
+echo "Marketplace version: $(jq -r '.plugins[0].version // "1.0.0"' "$MARKETPLACE_JSON")"
 
 if [ $errors -gt 0 ]; then
     echo -e "${RED}Errors: $errors${NC}"
