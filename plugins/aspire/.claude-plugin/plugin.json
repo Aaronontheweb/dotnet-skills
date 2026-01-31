@@ -1,0 +1,9 @@
+{
+  "name": "aspire",
+  "description": ".NET Aspire cloud-native orchestration and integration testing",
+  "version": "1.0.0",
+  "author": {
+    "name": "Aaron Stannard",
+    "url": "https://github.com/Aaronontheweb"
+  }
+}

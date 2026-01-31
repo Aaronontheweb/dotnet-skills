@@ -1,8 +1,8 @@
-# .NET Skills for Claude Code
+# .NET Skills for Coding Agents
 
-A comprehensive Claude Code plugin with **27 skills** and **5 specialized agents** for professional .NET development. Battle-tested patterns from production systems covering C#, Akka.NET, Aspire, EF Core, testing, and performance optimization.
+A comprehensive plugin marketplace with **27 skills** and **5 specialized agents** for professional .NET development. Battle-tested patterns from production systems covering C#, Akka.NET, Aspire, EF Core, testing, and performance optimization.
 
-## Installation
+## Installation (Claude Code / GitHub Copilot)
 
 Add the marketplace (one-time):
 
@@ -10,16 +10,18 @@ Add the marketplace (one-time):
 /plugin marketplace add Aaronontheweb/dotnet-skills
 ```
 
-Install the plugin:
+Install plugins by category:
 
 ```
-/plugin install dotnet-skills
+/plugin install akka@dotnet-skills
+/plugin install csharp@dotnet-skills
+/plugin install testing@dotnet-skills
 ```
 
-To update:
+To see available plugins:
 
 ```
-/plugin marketplace update
+/plugin marketplace list dotnet-skills
 ```
 
 ---
@@ -44,10 +46,10 @@ cd dotnet-skills
 mkdir -p ~/.config/opencode/skills
 
 # Install each skill (skill name must match frontmatter 'name' field)
-for skill_file in $(find skills -name "SKILL.md"); do
+for skill_file in $(find plugins -name "SKILL.md"); do
     skill_name=$(grep -m1 "^name:" "$skill_file" | sed 's/name: *//')
     mkdir -p ~/.config/opencode/skills/$skill_name
-cp "$skill_file" ~/.config/opencode/skills/$skill_name/SKILL.md
+    cp "$skill_file" ~/.config/opencode/skills/$skill_name/SKILL.md
 done
 ```
 
@@ -58,8 +60,8 @@ done
 mkdir -p ~/.config/opencode/agents
 
 # Install each agent
-for agent_file in agents/\*.md; do
-cp "$agent_file" ~/.config/opencode/agents/
+for agent_file in $(find plugins -path "*/agents/*.md"); do
+    cp "$agent_file" ~/.config/opencode/agents/
 done
 ```
 
@@ -74,12 +76,11 @@ Install the .NET skills from https://github.com/Aaronontheweb/dotnet-skills to m
 ```
 
 > The AI will:
-
 ```
 1. Clone the repository
 2. Extract skill names from SKILL.md frontmatter
 3. Create properly structured directories in ~/.config/opencode/skills/
-4. Copy agent files to ~/.config/opencode/agents/
+4. Copy agent files from plugins/*/agents/ to ~/.config/opencode/agents/
    Installed Locations
    | Type | Location |
    |------|----------|
@@ -89,13 +90,27 @@ Install the .NET skills from https://github.com/Aaronontheweb/dotnet-skills to m
    The SKILL.md and agent markdown formats follow the Agent Skills open standard (https://opencode.ai/docs/skills/), which is compatible with multiple AI coding tools including Claude Code and OpenCode.
 ```
 
+## Available Plugins
+
+| Plugin | Skills | Agents | Description |
+|--------|--------|--------|-------------|
+| **akka** | 5 | 2 | Akka.NET actor systems, clustering, persistence |
+| **aspire** | 2 | 0 | .NET Aspire cloud-native orchestration |
+| **aspnetcore** | 1 | 0 | ASP.NET Core web patterns |
+| **csharp** | 4 | 1 | Modern C# language patterns |
+| **data** | 2 | 0 | EF Core and database patterns |
+| **dotnet** | 5 | 0 | Core .NET development practices |
+| **meta** | 2 | 0 | Marketplace publishing skills |
+| **microsoft-extensions** | 2 | 0 | DI and configuration patterns |
+| **testing** | 4 | 2 | Testing frameworks and patterns |
+
 ---
 
 ## Suggested AGENTS.md / CLAUDE.md Snippets
 
-Prerequisite: install/sync the dotnet-skills plugin in your assistant runtime (Claude Code or OpenCode) so the skill IDs below resolve.
+Prerequisite: install the plugins from dotnet-skills marketplace so the skill IDs below resolve.
 
-To get consistent skill usage in downstream repos, add a small router snippet in `AGENTS.md` (OpenCode) or `CLAUDE.md` (Claude Code). These snippets tell the assistant which skills to use for common tasks.
+To get consistent skill usage in downstream repos, add a small router snippet in `AGENTS.md` (OpenCode, GitHub Copilot) or `CLAUDE.md` (Claude Code). These snippets tell the assistant which skills to use for common tasks.
 
 ### Readable snippet (copy/paste)
 
@@ -143,15 +158,15 @@ Run `./scripts/generate-skill-index-snippets.sh --update-readme` to refresh the 
 
 ## Specialized Agents
 
-Agents are AI personas with deep domain expertise. They're invoked automatically when Claude Code detects relevant tasks.
+Agents are AI personas with deep domain expertise. They're bundled with the relevant plugin.
 
-| Agent                             | Expertise                                                              |
-| --------------------------------- | ---------------------------------------------------------------------- |
-| **akka-net-specialist**           | Actor systems, clustering, persistence, Akka.Streams, message patterns |
-| **dotnet-concurrency-specialist** | Threading, async/await, race conditions, deadlock analysis             |
-| **dotnet-benchmark-designer**     | BenchmarkDotNet setup, custom benchmarks, measurement strategies       |
-| **dotnet-performance-analyst**    | Profiler analysis, benchmark interpretation, regression detection      |
-| **docfx-specialist**              | DocFX builds, API documentation, markdown linting                      |
+| Agent                             | Plugin | Expertise                                                              |
+| --------------------------------- | ------ | ---------------------------------------------------------------------- |
+| **akka-net-specialist**           | akka   | Actor systems, clustering, persistence, Akka.Streams, message patterns |
+| **docfx-specialist**              | akka   | DocFX builds, API documentation, markdown linting                      |
+| **dotnet-concurrency-specialist** | csharp | Threading, async/await, race conditions, deadlock analysis             |
+| **dotnet-benchmark-designer**     | testing | BenchmarkDotNet setup, custom benchmarks, measurement strategies       |
+| **dotnet-performance-analyst**    | testing | Profiler analysis, benchmark interpretation, regression detection      |
 
 ---
 
@@ -253,27 +268,26 @@ These skills emphasize patterns that work in production:
 
 ---
 
+---
+
 ## Repository Structure
 
 ```
 dotnet-skills/
-├── .claude-plugin/
-│   └── plugin.json         # Plugin manifest
-├── agents/                 # 5 specialized agents
-│   ├── akka-net-specialist.md
-│   ├── docfx-specialist.md
-│   ├── dotnet-benchmark-designer.md
-│   ├── dotnet-concurrency-specialist.md
-│   └── dotnet-performance-analyst.md
-└── skills/                 # 25 comprehensive skills
-    ├── akka/               # Akka.NET (5 skills)
-    ├── aspire/             # .NET Aspire (2 skills)
-    ├── aspnetcore/         # ASP.NET Core (1 skill)
-    ├── csharp/             # C# language (4 skills)
-    ├── data/               # Data access (2 skills)
-    ├── dotnet/             # .NET ecosystem (5 skills)
-    ├── microsoft-extensions/  # DI & config (2 skills)
-    └── testing/            # Testing (4 skills)
+├── .github/
+│   └── plugin/
+│       └── marketplace.json    # Plugin registry
+└── plugins/                    # 9 category-based plugins
+    ├── akka/
+    │   ├── skills/             # 5 Akka.NET skills
+    │   └── agents/             # 2 agents
+    ├── csharp/
+    │   ├── skills/             # 4 C# skills
+    │   └── agents/             # 1 agent
+    ├── testing/
+    │   ├── skills/             # 4 testing skills
+    │   └── agents/             # 2 agents
+    └── ...
 ```
 
 ---
@@ -282,9 +296,11 @@ dotnet-skills/
 
 Want to add a skill or agent? PRs welcome!
 
-1. Create `skills/<category>/<skill-name>/SKILL.md` (or `agents/<name>/AGENT.md`)
-2. Add the path to `.claude-plugin/plugin.json`
+1. Skills: Create `plugins/<plugin>/skills/<skill-name>/SKILL.md`
+2. Agents: Create `plugins/<plugin>/agents/<agent-name>.md`
 3. Submit a PR
+
+For a new category, also add the plugin to `.github/plugin/marketplace.json`.
 
 Skills should be comprehensive reference documents (10-40KB) with concrete examples and anti-patterns.
 

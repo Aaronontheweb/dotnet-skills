@@ -1,0 +1,9 @@
+{
+  "name": "microsoft-extensions",
+  "description": "Dependency injection and configuration patterns",
+  "version": "1.0.0",
+  "author": {
+    "name": "Aaron Stannard",
+    "url": "https://github.com/Aaronontheweb"
+  }
+}

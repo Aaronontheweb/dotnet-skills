@@ -6,41 +6,5 @@
     "name": "Aaron Stannard",
     "url": "https://github.com/Aaronontheweb"
   },
-  "repository": "https://github.com/Aaronontheweb/dotnet-skills",
-  "skills": [
-    "./skills/akka/best-practices",
-    "./skills/akka/testing-patterns",
-    "./skills/akka/hosting-actor-patterns",
-    "./skills/akka/aspire-configuration",
-    "./skills/akka/management",
-    "./skills/aspire/integration-testing",
-    "./skills/aspire/service-defaults",
-    "./skills/aspnetcore/transactional-emails",
-    "./skills/csharp/coding-standards",
-    "./skills/csharp/concurrency-patterns",
-    "./skills/csharp/api-design",
-    "./skills/csharp/type-design-performance",
-    "./skills/data/efcore-patterns",
-    "./skills/data/database-performance",
-    "./skills/dotnet/project-structure",
-    "./skills/dotnet/local-tools",
-    "./skills/dotnet/slopwatch",
-    "./skills/dotnet/package-management",
-    "./skills/dotnet/serialization",
-    "./skills/microsoft-extensions/configuration",
-    "./skills/microsoft-extensions/dependency-injection",
-    "./skills/testing/testcontainers",
-    "./skills/testing/playwright-blazor",
-    "./skills/testing/crap-analysis",
-    "./skills/testing/snapshot-testing",
-    "./skills/meta/marketplace-publishing",
-    "./skills/meta/skills-index-snippets"
-  ],
-  "agents": [
-    "./agents/akka-net-specialist.md",
-    "./agents/docfx-specialist.md",
-    "./agents/dotnet-benchmark-designer.md",
-    "./agents/dotnet-concurrency-specialist.md",
-    "./agents/dotnet-performance-analyst.md"
-  ]
+  "repository": "https://github.com/Aaronontheweb/dotnet-skills"
 }

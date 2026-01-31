@@ -1,0 +1,9 @@
+{
+  "name": "dotnet",
+  "description": "Core .NET development practices and tooling",
+  "version": "1.0.0",
+  "author": {
+    "name": "Aaron Stannard",
+    "url": "https://github.com/Aaronontheweb"
+  }
+}

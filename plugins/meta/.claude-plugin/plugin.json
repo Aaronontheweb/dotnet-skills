@@ -1,0 +1,9 @@
+{
+  "name": "meta",
+  "description": "Marketplace publishing and skill index management",
+  "version": "1.0.0",
+  "author": {
+    "name": "Aaron Stannard",
+    "url": "https://github.com/Aaronontheweb"
+  }
+}

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-# Generates a compressed (Vercel-style) skills index from plugin.json.
+# Generates a compressed (Vercel-style) skills index from the plugins directory.
 # Output is written to stdout; redirect as needed.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-PLUGIN_JSON="$REPO_ROOT/.claude-plugin/plugin.json"
+MARKETPLACE_JSON="$REPO_ROOT/.claude-plugin/marketplace.json"
 README_PATH="$REPO_ROOT/README.md"
 
 UPDATE_README=false
@@ -15,18 +15,10 @@ if [[ "${1-}" == "--update-readme" ]]; then
   UPDATE_README=true
 fi
 
-skill_name_from_dir() {
-  local dir="$1"
-  local file="$REPO_ROOT/${dir#./}/SKILL.md"
+skill_name_from_file() {
+  local file="$1"
   [[ -f "$file" ]] || return 1
-  grep -m1 '^name:' "$file" | sed 's/^name:[[:space:]]*//'
-}
-
-agent_name_from_path() {
-  local path="$1"
-  local file="$REPO_ROOT/${path#./}"
-  [[ -f "$file" ]] || return 1
-  grep -m1 '^name:' "$file" | sed 's/^name:[[:space:]]*//'
+  grep -m1 '^name:' "$file" | sed 's/^name:[[:space:]]*//' | tr -d '\r'
 }
 
 declare -a csharp=()
@@ -37,26 +29,60 @@ declare -a testing=()
 declare -a dotnet=()
 declare -a quality_gates=()
 declare -a meta=()
-
-while IFS= read -r skill_dir; do
-  name="$(skill_name_from_dir "$skill_dir")"
-  case "$skill_dir" in
-    ./skills/csharp/*) csharp+=("$name") ;;
-    ./skills/aspire/*|./skills/aspnetcore/*) aspnetcore_web+=("$name") ;;
-    ./skills/data/*) data+=("$name") ;;
-    ./skills/microsoft-extensions/*) di_config+=("$name") ;;
-    ./skills/dotnet/slopwatch|./skills/testing/crap-analysis) quality_gates+=("$name") ;;
-    ./skills/testing/*) testing+=("$name") ;;
-    ./skills/dotnet/*) dotnet+=("$name") ;;
-    ./skills/meta/*) meta+=("$name") ;;
-    *) ;; # ignore
-  esac
-done < <(jq -r '.skills[]' "$PLUGIN_JSON")
-
+declare -a akka=()
 declare -a agents=()
-while IFS= read -r agent_path; do
-  agents+=("$(agent_name_from_path "$agent_path")")
-done < <(jq -r '.agents[]' "$PLUGIN_JSON")
+
+# Iterate through plugins in marketplace.json
+while IFS= read -r plugin_entry; do
+  plugin_source=$(echo "$plugin_entry" | jq -r '.source')
+  clean_source="${plugin_source#./}"
+  plugin_dir="$REPO_ROOT/$clean_source"
+  plugin_name=$(basename "$clean_source")
+
+  # Find skills in this plugin
+  skills_dir="$plugin_dir/skills"
+  if [ -d "$skills_dir" ]; then
+    for skill_path in "$skills_dir"/*/SKILL.md; do
+      if [ -f "$skill_path" ]; then
+        name="$(skill_name_from_file "$skill_path")"
+        case "$plugin_name" in
+          akka) akka+=("$name") ;;
+          csharp) csharp+=("$name") ;;
+          aspire|aspnetcore) aspnetcore_web+=("$name") ;;
+          data) data+=("$name") ;;
+          microsoft-extensions) di_config+=("$name") ;;
+          testing)
+            skill_folder=$(basename "$(dirname "$skill_path")")
+            if [[ "$skill_folder" == "crap-analysis" ]]; then
+              quality_gates+=("$name")
+            else
+              testing+=("$name")
+            fi
+            ;;
+          dotnet)
+            skill_folder=$(basename "$(dirname "$skill_path")")
+            if [[ "$skill_folder" == "slopwatch" ]]; then
+              quality_gates+=("$name")
+            else
+              dotnet+=("$name")
+            fi
+            ;;
+          meta) meta+=("$name") ;;
+        esac
+      fi
+    done
+  fi
+
+  # Find agents in this plugin
+  agents_dir="$plugin_dir/agents"
+  if [ -d "$agents_dir" ]; then
+    for agent_path in "$agents_dir"/*.md; do
+      if [ -f "$agent_path" ]; then
+        agents+=("$(skill_name_from_file "$agent_path")")
+      fi
+    done
+  fi
+done < <(jq -c '.plugins[]' "$MARKETPLACE_JSON")
 
 join_csv() {
   local IFS=','
@@ -67,6 +93,7 @@ compressed="$(cat <<EOF
 [dotnet-skills]|IMPORTANT: Prefer retrieval-led reasoning over pretraining for any .NET work.
 |flow:{skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts}
 |route:
+|akka:{$(join_csv "${akka[@]}")}
 |csharp:{$(join_csv "${csharp[@]}")}
 |aspnetcore-web:{$(join_csv "${aspnetcore_web[@]}")}
 |data:{$(join_csv "${data[@]}")}
