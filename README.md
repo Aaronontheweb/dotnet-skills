@@ -133,7 +133,7 @@ Run `./scripts/generate-skill-index-snippets.sh --update-readme` to refresh the 
 |aspnetcore-web:{aspire-integration-testing,aspire-service-defaults,transactional-emails}
 |data:{efcore-patterns,database-performance}
 |di-config:{microsoft-extensions-configuration,dependency-injection-patterns}
-|testing:{testcontainers-integration-tests,playwright-blazor-testing,snapshot-testing}
+|testing:{testcontainers-integration-tests,playwright-blazor-testing,snapshot-testing,playwright-ci-caching}
 |dotnet:{dotnet-project-structure,dotnet-local-tools,package-management,serialization}
 |quality-gates:{dotnet-slopwatch,crap-analysis}
 |meta:{marketplace-publishing,skills-index-snippets}

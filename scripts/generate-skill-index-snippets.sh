@@ -46,7 +46,7 @@ while IFS= read -r skill_dir; do
     ./skills/data/*) data+=("$name") ;;
     ./skills/microsoft-extensions/*) di_config+=("$name") ;;
     ./skills/dotnet/slopwatch|./skills/testing/crap-analysis) quality_gates+=("$name") ;;
-    ./skills/testing/*) testing+=("$name") ;;
+    ./skills/testing/*|./skills/playwright/*) testing+=("$name") ;;
     ./skills/dotnet/*) dotnet+=("$name") ;;
     ./skills/meta/*) meta+=("$name") ;;
     *) ;; # ignore

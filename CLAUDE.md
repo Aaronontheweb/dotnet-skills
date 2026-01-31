@@ -55,22 +55,20 @@ color: purple  # optional
 1. Create a folder under the appropriate category: `skills/<category>/<skill-name>/SKILL.md`
 2. Add the skill path to `.claude-plugin/plugin.json` in the `skills` array
 3. Run `./scripts/validate-marketplace.sh` to verify
-4. Commit both changes together
+4. Run `./scripts/generate-skill-index-snippets.sh --update-readme` to regenerate the compressed index
+5. Commit all changes together (SKILL.md, plugin.json, and README.md)
 
-After adding/removing skills, update the downstream snippet/router indexes:
-- See `skills/meta/skills-index-snippets/SKILL.md`
-- Regenerate the compressed index with `./scripts/generate-skill-index-snippets.sh`
+### Creating a New Skill Category
+
+When adding a skill to a **new** top-level folder (e.g., `skills/playwright/`), you must also update `scripts/generate-skill-index-snippets.sh` to handle the new category in its `case` statement. Otherwise the skill will be silently ignored when generating the index.
 
 ## Adding New Agents
 
 1. Create the agent file: `agents/<agent-name>.md`
 2. Add the agent path to `.claude-plugin/plugin.json` in the `agents` array
 3. Run `./scripts/validate-marketplace.sh` to verify
-4. Commit both changes together
-
-After adding/removing agents, update the downstream snippet/router indexes:
-- See `skills/meta/skills-index-snippets/SKILL.md`
-- Regenerate the compressed index with `./scripts/generate-skill-index-snippets.sh`
+4. Run `./scripts/generate-skill-index-snippets.sh --update-readme` to regenerate the compressed index
+5. Commit all changes together (agent .md, plugin.json, and README.md)
 
 ## Marketplace Publishing
 
