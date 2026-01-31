@@ -33,6 +33,7 @@
     "./skills/testing/playwright-blazor",
     "./skills/testing/crap-analysis",
     "./skills/testing/snapshot-testing",
+    "./skills/playwright/ci-caching",
     "./skills/meta/marketplace-publishing",
     "./skills/meta/skills-index-snippets"
   ],
