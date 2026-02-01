@@ -1,18 +1,21 @@
 ---
-name: transactional-emails
-description: Build transactional emails using MJML templates with variable substitution. Render responsive HTML that works across email clients. Test with Mailpit/Mailhog in development via Aspire.
+name: mjml-email-templates
+description: Build responsive email templates using MJML markup language. Compiles to cross-client HTML that works in Outlook, Gmail, and Apple Mail. Includes template renderer, layout patterns, and variable substitution.
 invocable: false
 ---
 
-# Transactional Emails with MJML
+# MJML Email Templates
 
 ## When to Use This Skill
 
 Use this skill when:
 - Building transactional emails (signup, password reset, invoices, notifications)
 - Creating responsive email templates that work across clients
-- Setting up email testing infrastructure in development
-- Implementing email preview/approval workflows
+- Setting up MJML template rendering in .NET
+
+**Related skills:**
+- `aspire/mailpit-integration` - Test emails locally with Mailpit
+- `testing/verify-email-snapshots` - Snapshot test rendered HTML
 
 ---
 
@@ -36,23 +39,22 @@ Compiles to ~200 lines of table-based HTML with inline styles that works everywh
 
 ---
 
-## Architecture
+## Installation
 
+### Add Mjml.Net
+
+```bash
+dotnet add package Mjml.Net
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Email Flow                                │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  MJML Template    ──►  Mjml.Net Renderer  ──►  HTML Email   │
-│  (embedded resource)      (compile-time)       (rendered)   │
-│        │                                           │        │
-│        │                                           ▼        │
-│        │                               ┌───────────────────┐│
-│        └──────────────────────────────►│   SMTP Gateway    ││
-│           Variable substitution        │  - Production     ││
-│           {{UserName}}, {{Link}}       │  - Mailpit (dev)  ││
-│                                        └───────────────────┘│
-└─────────────────────────────────────────────────────────────┘
+
+### Embed Templates as Resources
+
+In your `.csproj`:
+
+```xml
+<ItemGroup>
+  <EmbeddedResource Include="Templates\**\*.mjml" />
+</ItemGroup>
 ```
 
 ---
@@ -85,29 +87,7 @@ src/
 
 ---
 
-## Installation
-
-### Add Mjml.Net
-
-```bash
-dotnet add package Mjml.Net
-```
-
-### Embed Templates as Resources
-
-In your `.csproj`:
-
-```xml
-<ItemGroup>
-  <EmbeddedResource Include="Templates\**\*.mjml" />
-</ItemGroup>
-```
-
----
-
-## Template Structure
-
-### Layout Template (_Layout.mjml)
+## Layout Template (_Layout.mjml)
 
 ```mjml
 <mjml>
@@ -156,7 +136,9 @@ In your `.csproj`:
 </mjml>
 ```
 
-### Content Template
+---
+
+## Content Template
 
 ```mjml
 <!-- UserInvitations/UserSignupInvitation.mjml -->
@@ -274,7 +256,7 @@ public sealed partial class MjmlTemplateRenderer : IMjmlTemplateRenderer
 
 ## Email Composer Pattern
 
-Separate template rendering from email composition:
+Separate template rendering from email composition with strongly-typed value objects:
 
 ```csharp
 public interface IUserEmailComposer
@@ -329,81 +311,6 @@ public sealed class UserEmailComposer : IUserEmailComposer
     }
 }
 ```
-
----
-
-## Development Testing with Mailpit
-
-Use Mailpit (or Mailhog) to capture emails locally without sending them.
-
-### Aspire Integration
-
-See `aspire/integration-testing` skill for full Aspire setup. Add Mailpit:
-
-```csharp
-// AppHost/Program.cs
-var mailpit = builder.AddContainer("mailpit", "axllent/mailpit")
-    .WithHttpEndpoint(port: 8025, targetPort: 8025, name: "ui")
-    .WithEndpoint(port: 1025, targetPort: 1025, name: "smtp");
-
-var api = builder.AddProject<Projects.MyApp_Api>("api")
-    .WithReference(mailpit.GetEndpoint("smtp"))
-    .WithEnvironment("Smtp__Host", mailpit.GetEndpoint("smtp"));
-```
-
-### Configure SMTP Client
-
-```csharp
-// In development, use Mailpit
-services.AddSingleton<IEmailSender>(sp =>
-{
-    var config = sp.GetRequiredService<IConfiguration>();
-    var host = config["Smtp:Host"] ?? "localhost";
-    var port = int.Parse(config["Smtp:Port"] ?? "1025");
-
-    return new SmtpEmailSender(host, port);
-});
-```
-
-### View Captured Emails
-
-Navigate to `http://localhost:8025` to see all captured emails with:
-- Full HTML rendering
-- Source view
-- Headers inspection
-- Attachment handling
-
----
-
-## Snapshot Testing Emails
-
-Use Verify to catch template regressions (see `testing/snapshot-testing` skill):
-
-```csharp
-[Fact]
-public async Task UserSignupInvitation_RendersCorrectly()
-{
-    var renderer = _services.GetRequiredService<IMjmlTemplateRenderer>();
-
-    var variables = new Dictionary<string, string>
-    {
-        { "PreviewText", "You've been invited to join Acme Corp" },
-        { "OrganizationName", "Acme Corporation" },
-        { "InviteeName", "John Doe" },
-        { "InviterName", "Jane Admin" },
-        { "InvitationLink", "https://example.com/invite/abc123" },
-        { "ExpirationDate", "December 31, 2025" }
-    };
-
-    var html = await renderer.RenderTemplateAsync(
-        "UserInvitations/UserSignupInvitation",
-        variables);
-
-    await Verify(html, extension: "html");
-}
-```
-
-Creates `UserSignupInvitation_RendersCorrectly.verified.html` - review in browser or diff tool.
 
 ---
 
@@ -464,20 +371,6 @@ Task<EmailMessage> ComposeAsync(
     string url);
 ```
 
-### Testing
-
-```csharp
-// DO: Test each template variant
-[Fact] Task WelcomeEmail_NewUser_RendersCorrectly()
-[Fact] Task WelcomeEmail_InvitedUser_RendersCorrectly()
-
-// DO: Use Mailpit in integration tests
-// DO: Snapshot test rendered HTML
-
-// DON'T: Skip email testing
-// DON'T: Only test in production
-```
-
 ---
 
 ## MJML Components Reference
@@ -501,5 +394,3 @@ Task<EmailMessage> ComposeAsync(
 - **MJML Documentation**: https://documentation.mjml.io/
 - **MJML Playground**: https://mjml.io/try-it-live
 - **Mjml.Net**: https://github.com/ArtZab/Mjml.Net
-- **Mailpit**: https://github.com/axllent/mailpit
-- **Email on Acid** (testing): https://www.emailonacid.com/

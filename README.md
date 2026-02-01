@@ -1,6 +1,6 @@
 # .NET Skills for Claude Code
 
-A comprehensive Claude Code plugin with **27 skills** and **5 specialized agents** for professional .NET development. Battle-tested patterns from production systems covering C#, Akka.NET, Aspire, EF Core, testing, and performance optimization.
+A comprehensive Claude Code plugin with **30 skills** and **5 specialized agents** for professional .NET development. Battle-tested patterns from production systems covering C#, Akka.NET, Aspire, EF Core, testing, and performance optimization.
 
 ## Installation
 
@@ -130,10 +130,10 @@ Run `./scripts/generate-skill-index-snippets.sh --update-readme` to refresh the 
 |flow:{skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts}
 |route:
 |csharp:{modern-csharp-coding-standards,csharp-concurrency-patterns,api-design,type-design-performance}
-|aspnetcore-web:{aspire-integration-testing,aspire-service-defaults,transactional-emails}
+|aspnetcore-web:{aspire-integration-testing,aspire-service-defaults,mailpit-integration,mjml-email-templates}
 |data:{efcore-patterns,database-performance}
 |di-config:{microsoft-extensions-configuration,dependency-injection-patterns}
-|testing:{testcontainers-integration-tests,playwright-blazor-testing,snapshot-testing,playwright-ci-caching}
+|testing:{testcontainers-integration-tests,playwright-blazor-testing,snapshot-testing,verify-email-snapshots,playwright-ci-caching}
 |dotnet:{dotnet-project-structure,dotnet-local-tools,package-management,serialization}
 |quality-gates:{dotnet-slopwatch,crap-analysis}
 |meta:{marketplace-publishing,skills-index-snippets}
@@ -197,14 +197,15 @@ Cloud-native application orchestration.
 | ----------------------- | ------------------------------------------------------------ |
 | **integration-testing** | DistributedApplicationTestingBuilder, Aspire.Hosting.Testing |
 | **service-defaults**    | OpenTelemetry, health checks, resilience, service discovery  |
+| **mailpit-integration** | Email testing with Mailpit container, SMTP config, test assertions |
 
 ### ASP.NET Core
 
 Web application patterns.
 
-| Skill                    | What You'll Learn                                      |
-| ------------------------ | ------------------------------------------------------ |
-| **transactional-emails** | MJML templates, variable substitution, Mailpit testing |
+| Skill                    | What You'll Learn                                         |
+| ------------------------ | --------------------------------------------------------- |
+| **mjml-email-templates** | MJML syntax, responsive layouts, template renderer, composer pattern |
 
 ### .NET Ecosystem
 
@@ -231,12 +232,13 @@ Dependency injection and configuration patterns.
 
 Comprehensive testing strategies.
 
-| Skill                 | What You'll Learn                                             |
-| --------------------- | ------------------------------------------------------------- |
-| **testcontainers**    | Docker-based integration tests, PostgreSQL, Redis, RabbitMQ   |
-| **playwright-blazor** | E2E testing for Blazor apps, page objects, async assertions   |
-| **crap-analysis**     | CRAP scores, coverage thresholds, ReportGenerator integration |
-| **snapshot-testing**  | Verify library, approval testing, API response validation     |
+| Skill                      | What You'll Learn                                             |
+| -------------------------- | ------------------------------------------------------------- |
+| **testcontainers**         | Docker-based integration tests, PostgreSQL, Redis, RabbitMQ   |
+| **playwright-blazor**      | E2E testing for Blazor apps, page objects, async assertions   |
+| **crap-analysis**          | CRAP scores, coverage thresholds, ReportGenerator integration |
+| **snapshot-testing**       | Verify library, approval testing, API response validation     |
+| **verify-email-snapshots** | Snapshot test email templates, catch rendering regressions    |
 
 ---
 
@@ -265,15 +267,15 @@ dotnet-skills/
 │   ├── dotnet-benchmark-designer.md
 │   ├── dotnet-concurrency-specialist.md
 │   └── dotnet-performance-analyst.md
-└── skills/                 # 25 comprehensive skills
+└── skills/                 # 30 comprehensive skills
     ├── akka/               # Akka.NET (5 skills)
-    ├── aspire/             # .NET Aspire (2 skills)
+    ├── aspire/             # .NET Aspire (3 skills)
     ├── aspnetcore/         # ASP.NET Core (1 skill)
     ├── csharp/             # C# language (4 skills)
     ├── data/               # Data access (2 skills)
     ├── dotnet/             # .NET ecosystem (5 skills)
     ├── microsoft-extensions/  # DI & config (2 skills)
-    └── testing/            # Testing (4 skills)
+    └── testing/            # Testing (5 skills)
 ```
 
 ---
