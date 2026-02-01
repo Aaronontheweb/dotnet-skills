@@ -1,6 +1,6 @@
 {
   "name": "dotnet-skills",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Comprehensive .NET development skills and agents for Claude Code - covering C#, F#, Akka.NET, Aspire, testing frameworks, and specialized tools",
   "author": {
     "name": "Aaron Stannard",
