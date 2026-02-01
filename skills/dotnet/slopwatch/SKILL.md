@@ -1,6 +1,7 @@
 ---
 name: dotnet-slopwatch
 description: Use Slopwatch to detect LLM reward hacking in .NET code changes. Run after every code modification to catch disabled tests, suppressed warnings, empty catch blocks, and other shortcuts that mask real problems.
+invocable: true
 ---
 
 # Slopwatch: LLM Anti-Cheat for .NET

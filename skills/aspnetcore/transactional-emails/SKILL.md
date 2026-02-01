@@ -1,6 +1,7 @@
 ---
 name: transactional-emails
 description: Build transactional emails using MJML templates with variable substitution. Render responsive HTML that works across email clients. Test with Mailpit/Mailhog in development via Aspire.
+invocable: false
 ---
 
 # Transactional Emails with MJML

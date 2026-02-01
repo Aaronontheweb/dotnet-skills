@@ -1,6 +1,7 @@
 ---
 name: snapshot-testing
 description: Use Verify for snapshot testing in .NET. Approve API surfaces, HTTP responses, rendered emails, and serialized outputs. Detect unintended changes through human-reviewed baseline files.
+invocable: false
 ---
 
 # Snapshot Testing with Verify

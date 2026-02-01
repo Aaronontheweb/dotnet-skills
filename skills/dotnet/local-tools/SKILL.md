@@ -1,6 +1,7 @@
 ---
 name: dotnet-local-tools
 description: Managing local .NET tools with dotnet-tools.json for consistent tooling across development environments and CI/CD pipelines.
+invocable: false
 ---
 
 # .NET Local Tools
