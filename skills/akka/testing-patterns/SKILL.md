@@ -1,6 +1,7 @@
 ---
 name: akka-net-testing-patterns
 description: Write unit and integration tests for Akka.NET actors using modern Akka.Hosting.TestKit patterns. Covers dependency injection, TestProbes, persistence testing, and actor interaction verification. Includes guidance on when to use traditional TestKit.
+invocable: false
 ---
 
 # Akka.NET Testing Patterns

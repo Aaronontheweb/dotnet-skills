@@ -1,6 +1,7 @@
 ---
 name: dependency-injection-patterns
 description: Organize DI registrations using IServiceCollection extension methods. Group related services into composable Add* methods for clean Program.cs and reusable configuration in tests.
+invocable: false
 ---
 
 # Dependency Injection Patterns

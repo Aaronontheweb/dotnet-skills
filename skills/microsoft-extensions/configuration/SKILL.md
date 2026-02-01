@@ -1,6 +1,7 @@
 ---
 name: microsoft-extensions-configuration
 description: Microsoft.Extensions.Options patterns including IValidateOptions, strongly-typed settings, validation on startup, and the Options pattern for clean configuration management.
+invocable: false
 ---
 
 # Microsoft.Extensions Configuration Patterns

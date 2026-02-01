@@ -1,6 +1,7 @@
 ---
 name: marketplace-publishing
 description: Workflow for publishing skills and agents to the dotnet-skills Claude Code marketplace. Covers adding new content, updating plugin.json, validation, and release tagging.
+invocable: true
 ---
 
 # Marketplace Publishing Workflow

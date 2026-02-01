@@ -1,6 +1,7 @@
 ---
 name: akka-net-best-practices
 description: Critical Akka.NET best practices including EventStream vs DistributedPubSub, supervision strategies, error handling, Props vs DependencyResolver, work distribution patterns, and cluster/local mode abstractions for testability.
+invocable: false
 ---
 
 # Akka.NET Best Practices

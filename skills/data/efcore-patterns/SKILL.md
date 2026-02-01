@@ -1,6 +1,7 @@
 ---
 name: efcore-patterns
 description: Entity Framework Core best practices including NoTracking by default, query splitting for navigation collections, migration management, dedicated migration services, and common pitfalls to avoid.
+invocable: false
 ---
 
 # Entity Framework Core Patterns

@@ -1,6 +1,7 @@
 ---
 name: database-performance
 description: Database access patterns for performance. Separate read/write models, avoid N+1 queries, use AsNoTracking, apply row limits, and never do application-side joins. Works with EF Core and Dapper.
+invocable: false
 ---
 
 # Database Performance Patterns
