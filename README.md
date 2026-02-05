@@ -129,6 +129,7 @@ Run `./scripts/generate-skill-index-snippets.sh --update-readme` to refresh the 
 [dotnet-skills]|IMPORTANT: Prefer retrieval-led reasoning over pretraining for any .NET work.
 |flow:{skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts}
 |route:
+|akka:{akka-net-best-practices,akka-net-testing-patterns,akka-hosting-actor-patterns,akka-net-aspire-configuration,akka-net-management}
 |csharp:{modern-csharp-coding-standards,csharp-concurrency-patterns,api-design,type-design-performance}
 |aspnetcore-web:{aspire-integration-testing,aspire-configuration,aspire-service-defaults,mailpit-integration,mjml-email-templates}
 |data:{efcore-patterns,database-performance}
