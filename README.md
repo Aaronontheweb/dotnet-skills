@@ -4,7 +4,7 @@ A comprehensive Claude Code plugin with **30 skills** and **5 specialized agents
 
 ## Installation
 
-This plugin uses the [Agent Skills open standard](https://github.com/anthropics/claude-code/blob/main/docs/plugins.md) and works with multiple AI coding assistants.
+This plugin works with multiple AI coding assistants that support skills/agents.
 
 ### Claude Code (CLI)
 
