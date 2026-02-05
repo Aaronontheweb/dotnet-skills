@@ -951,7 +951,7 @@ public class MyActor : ReceiveActor
     {
         Receive<MyMessage>(msg =>
         {
-            // ✅ Akka.NET ILoggingAdapter with semantic logging (v1.5.59+)
+            // ✅ Akka.NET ILoggingAdapter with semantic logging (v1.5.57+)
             _log.Info("Processing message for user {UserId}", msg.UserId);
             _log.Error(ex, "Failed to process {MessageType}", msg.GetType().Name);
         });
@@ -961,7 +961,7 @@ public class MyActor : ReceiveActor
 
 **Why ILoggingAdapter:**
 - Integrates with Akka's logging pipeline and supervision
-- Supports semantic/structured logging as of v1.5.59
+- Supports semantic/structured logging as of v1.5.57
 - Method names: `Info()`, `Debug()`, `Warning()`, `Error()` (not `Log*` variants)
 - No DI required - obtained directly from actor context
 
@@ -980,9 +980,9 @@ public class MyActor : ReceiveActor
 }
 ```
 
-### Semantic Logging (v1.5.59+)
+### Semantic Logging (v1.5.57+)
 
-As of Akka.NET v1.5.59, `ILoggingAdapter` supports semantic/structured logging with named placeholders:
+As of Akka.NET v1.5.57, `ILoggingAdapter` supports semantic/structured logging with named placeholders:
 
 ```csharp
 // Named placeholders for better log aggregation and querying
