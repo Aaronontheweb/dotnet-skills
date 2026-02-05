@@ -17,18 +17,25 @@ dotnet-skills/
 ├── .claude-plugin/
 │   ├── marketplace.json    # Marketplace catalog
 │   └── plugin.json         # Plugin metadata + skill/agent registry
-├── skills/
-│   ├── akka/               # Akka.NET skills
-│   │   ├── best-practices/SKILL.md
-│   │   ├── testing-patterns/SKILL.md
-│   │   └── ...
-│   ├── aspire/             # .NET Aspire skills
-│   ├── csharp/             # C# language skills
-│   ├── testing/            # Testing framework skills
-│   └── meta/               # Meta skills (marketplace publishing)
+├── skills/                 # Flat structure for Copilot compatibility
+│   ├── akka-best-practices/SKILL.md
+│   ├── aspire-integration-testing/SKILL.md
+│   ├── csharp-coding-standards/SKILL.md
+│   ├── testcontainers/SKILL.md
+│   └── ...
 ├── agents/                 # Agent definitions (flat .md files)
 └── scripts/                # Validation and sync scripts
 ```
+
+### Skill Naming Convention
+
+Skills use a flat directory structure with prefixes for framework-specific skills:
+- `akka-*` - Akka.NET skills
+- `aspire-*` - .NET Aspire skills
+- `csharp-*` - C# language skills
+- `microsoft-extensions-*` - Microsoft.Extensions.* packages
+- `playwright-*` - Playwright-specific skills
+- No prefix for general .NET skills (e.g., `testcontainers`, `efcore-patterns`)
 
 ## File Formats
 
@@ -52,15 +59,17 @@ color: purple  # optional
 
 ## Adding New Skills
 
-1. Create a folder under the appropriate category: `skills/<category>/<skill-name>/SKILL.md`
+1. Create a folder: `skills/<skill-name>/SKILL.md`
+   - Use appropriate prefix for framework-specific skills (see naming convention above)
+   - No prefix for general .NET skills
 2. Add the skill path to `.claude-plugin/plugin.json` in the `skills` array
 3. Run `./scripts/validate-marketplace.sh` to verify
 4. Run `./scripts/generate-skill-index-snippets.sh --update-readme` to regenerate the compressed index
 5. Commit all changes together (SKILL.md, plugin.json, and README.md)
 
-### Creating a New Skill Category
+### Adding Skills to Index Categories
 
-When adding a skill to a **new** top-level folder (e.g., `skills/playwright/`), you must also update `scripts/generate-skill-index-snippets.sh` to handle the new category in its `case` statement. Otherwise the skill will be silently ignored when generating the index.
+When adding a skill with a **new prefix pattern**, update `scripts/generate-skill-index-snippets.sh` to handle the new pattern in its `case` statement. Otherwise the skill will be silently ignored when generating the index.
 
 ## Adding New Agents
 
@@ -83,7 +92,7 @@ When adding a skill to a **new** top-level folder (e.g., `skills/playwright/`), 
 /plugin install dotnet-skills
 ```
 
-See `skills/meta/marketplace-publishing/SKILL.md` for detailed workflow.
+See `skills/marketplace-publishing/SKILL.md` for detailed workflow.
 
 ## Content Guidelines
 
@@ -95,5 +104,5 @@ See `skills/meta/marketplace-publishing/SKILL.md` for detailed workflow.
 ## Router / Index Snippets
 
 When skills/agents change, keep the copy/paste snippet indexes up to date:
-- See `skills/meta/skills-index-snippets/SKILL.md`
+- See `skills/skills-index-snippets/SKILL.md`
 - Generate a compressed index with `./scripts/generate-skill-index-snippets.sh`

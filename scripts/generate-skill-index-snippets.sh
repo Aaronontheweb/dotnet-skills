@@ -29,6 +29,7 @@ agent_name_from_path() {
   grep -m1 '^name:' "$file" | sed 's/^name:[[:space:]]*//'
 }
 
+declare -a akka=()
 declare -a csharp=()
 declare -a aspnetcore_web=()
 declare -a data=()
@@ -41,14 +42,15 @@ declare -a meta=()
 while IFS= read -r skill_dir; do
   name="$(skill_name_from_dir "$skill_dir")"
   case "$skill_dir" in
-    ./skills/csharp/*) csharp+=("$name") ;;
-    ./skills/aspire/*|./skills/aspnetcore/*) aspnetcore_web+=("$name") ;;
-    ./skills/data/*) data+=("$name") ;;
-    ./skills/microsoft-extensions/*) di_config+=("$name") ;;
-    ./skills/dotnet/slopwatch|./skills/testing/crap-analysis) quality_gates+=("$name") ;;
-    ./skills/testing/*|./skills/playwright/*) testing+=("$name") ;;
-    ./skills/dotnet/*) dotnet+=("$name") ;;
-    ./skills/meta/*) meta+=("$name") ;;
+    ./skills/akka-*) akka+=("$name") ;;
+    ./skills/csharp-*) csharp+=("$name") ;;
+    ./skills/aspire-*|./skills/mjml-*) aspnetcore_web+=("$name") ;;
+    ./skills/efcore-*|./skills/database-*) data+=("$name") ;;
+    ./skills/microsoft-extensions-*) di_config+=("$name") ;;
+    ./skills/slopwatch|./skills/crap-analysis) quality_gates+=("$name") ;;
+    ./skills/testcontainers|./skills/playwright-*|./skills/snapshot-*|./skills/verify-*) testing+=("$name") ;;
+    ./skills/project-structure|./skills/local-tools|./skills/package-management|./skills/serialization) dotnet+=("$name") ;;
+    ./skills/marketplace-*|./skills/skills-index-*) meta+=("$name") ;;
     *) ;; # ignore
   esac
 done < <(jq -r '.skills[]' "$PLUGIN_JSON")
@@ -67,6 +69,7 @@ compressed="$(cat <<EOF
 [dotnet-skills]|IMPORTANT: Prefer retrieval-led reasoning over pretraining for any .NET work.
 |flow:{skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts}
 |route:
+|akka:{$(join_csv "${akka[@]}")}
 |csharp:{$(join_csv "${csharp[@]}")}
 |aspnetcore-web:{$(join_csv "${aspnetcore_web[@]}")}
 |data:{$(join_csv "${data[@]}")}
