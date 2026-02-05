@@ -4,94 +4,66 @@ A comprehensive Claude Code plugin with **30 skills** and **5 specialized agents
 
 ## Installation
 
-Add the marketplace (one-time):
+This plugin uses the [Agent Skills open standard](https://github.com/anthropics/claude-code/blob/main/docs/plugins.md) and works with multiple AI coding assistants.
+
+### Claude Code (CLI)
+
+[Official Docs](https://code.claude.com/docs/en/discover-plugins)
+
+Run these commands inside the Claude Code CLI (the terminal app, not the VSCode extension):
 
 ```
 /plugin marketplace add Aaronontheweb/dotnet-skills
-```
-
-Install the plugin:
-
-```
 /plugin install dotnet-skills
 ```
 
 To update:
-
 ```
 /plugin marketplace update
 ```
 
----
+### GitHub Copilot
 
-## OpenCode Installation
+[Official Docs](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills)
 
-OpenCode (https://opencode.ai/) is an open-source AI coding assistant that supports the same skill/agent format. These skills and agents are fully compatible with OpenCode.
+Clone or copy skills to your project or global config:
 
-### Manual Installation
-
-#### 1.Clone the repository:
-
+**Project-level** (recommended):
 ```bash
-git clone https://github.com/Aaronontheweb/dotnet-skills.git
-cd dotnet-skills
+# Clone to .github/skills/ in your project
+git clone https://github.com/Aaronontheweb/dotnet-skills.git /tmp/dotnet-skills
+cp -r /tmp/dotnet-skills/skills/* .github/skills/
 ```
 
-#### 2.Install skills:
+**Global** (all projects):
+```bash
+mkdir -p ~/.copilot/skills
+cp -r /tmp/dotnet-skills/skills/* ~/.copilot/skills/
+```
+
+### OpenCode
+
+[Official Docs](https://opencode.ai/docs/skills)
 
 ```bash
-# Create OpenCode skills directory
-mkdir -p ~/.config/opencode/skills
+git clone https://github.com/Aaronontheweb/dotnet-skills.git /tmp/dotnet-skills
 
-# Install each skill (skill name must match frontmatter 'name' field)
-for skill_file in $(find skills -name "SKILL.md"); do
-    skill_name=$(grep -m1 "^name:" "$skill_file" | sed 's/name: *//')
-    mkdir -p ~/.config/opencode/skills/$skill_name
-cp "$skill_file" ~/.config/opencode/skills/$skill_name/SKILL.md
+# Global installation
+mkdir -p ~/.config/opencode/skills ~/.config/opencode/agents
+for skill in /tmp/dotnet-skills/skills/*/; do
+  name=$(basename "$skill")
+  cp -r "$skill" ~/.config/opencode/skills/
 done
-```
-
-#### 3.Install agents:
-
-```bash
-# Create OpenCode agents directory
-mkdir -p ~/.config/opencode/agents
-
-# Install each agent
-for agent_file in agents/\*.md; do
-cp "$agent_file" ~/.config/opencode/agents/
-done
-```
-
-#### 4. Restart OpenCode to load the new skills and agents.
-
-### AI-Assisted Installation
-
-If you're using OpenCode or another AI coding assistant, you can ask it to install these skills automatically:
-
-```
-Install the .NET skills from https://github.com/Aaronontheweb/dotnet-skills to my OpenCode configuration
-```
-
-> The AI will:
-
-```
-1. Clone the repository
-2. Extract skill names from SKILL.md frontmatter
-3. Create properly structured directories in ~/.config/opencode/skills/
-4. Copy agent files to ~/.config/opencode/agents/
-   Installed Locations
-   | Type | Location |
-   |------|----------|
-   | Skills | ~/.config/opencode/skills/<skill-name>/SKILL.md |
-   | Agents | ~/.config/opencode/agents/<agent-name>.md |
-   Compatibility Note
-   The SKILL.md and agent markdown formats follow the Agent Skills open standard (https://opencode.ai/docs/skills/), which is compatible with multiple AI coding tools including Claude Code and OpenCode.
+cp /tmp/dotnet-skills/agents/*.md ~/.config/opencode/agents/
 ```
 
 ---
 
 ## Suggested AGENTS.md / CLAUDE.md Snippets
+
+These snippets go in your **project root** (the root directory of your codebase, next to your `.git` folder):
+- Claude Code: `CLAUDE.md`
+- OpenCode: `AGENTS.md`
 
 Prerequisite: install/sync the dotnet-skills plugin in your assistant runtime (Claude Code or OpenCode) so the skill IDs below resolve.
 
@@ -267,15 +239,15 @@ dotnet-skills/
 │   ├── dotnet-benchmark-designer.md
 │   ├── dotnet-concurrency-specialist.md
 │   └── dotnet-performance-analyst.md
-└── skills/                 # 30 comprehensive skills
-    ├── akka/               # Akka.NET (5 skills)
-    ├── aspire/             # .NET Aspire (3 skills)
-    ├── aspnetcore/         # ASP.NET Core (1 skill)
-    ├── csharp/             # C# language (4 skills)
-    ├── data/               # Data access (2 skills)
-    ├── dotnet/             # .NET ecosystem (5 skills)
-    ├── microsoft-extensions/  # DI & config (2 skills)
-    └── testing/            # Testing (5 skills)
+└── skills/                 # Flat structure (30 skills)
+    ├── akka-best-practices/SKILL.md
+    ├── akka-hosting-actor-patterns/SKILL.md
+    ├── akka-net-aspire-configuration/SKILL.md
+    ├── aspire-configuration/SKILL.md
+    ├── aspire-integration-testing/SKILL.md
+    ├── csharp-concurrency-patterns/SKILL.md
+    ├── testcontainers-integration-tests/SKILL.md
+    └── ...                 # (prefixed by category)
 ```
 
 ---
@@ -284,7 +256,7 @@ dotnet-skills/
 
 Want to add a skill or agent? PRs welcome!
 
-1. Create `skills/<category>/<skill-name>/SKILL.md` (or `agents/<name>/AGENT.md`)
+1. Create `skills/<skill-name>/SKILL.md` (use prefixes like `akka-`, `aspire-`, `csharp-` for category)
 2. Add the path to `.claude-plugin/plugin.json`
 3. Submit a PR
 
