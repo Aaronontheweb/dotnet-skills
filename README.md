@@ -48,11 +48,12 @@ cp -r /tmp/dotnet-skills/skills/* ~/.copilot/skills/
 ```bash
 git clone https://github.com/Aaronontheweb/dotnet-skills.git /tmp/dotnet-skills
 
-# Global installation
+# Global installation (directory names must match frontmatter 'name' field)
 mkdir -p ~/.config/opencode/skills ~/.config/opencode/agents
-for skill in /tmp/dotnet-skills/skills/*/; do
-  name=$(basename "$skill")
-  cp -r "$skill" ~/.config/opencode/skills/
+for skill_file in /tmp/dotnet-skills/skills/*/SKILL.md; do
+  skill_name=$(grep -m1 "^name:" "$skill_file" | sed 's/name: *//')
+  mkdir -p ~/.config/opencode/skills/$skill_name
+  cp "$skill_file" ~/.config/opencode/skills/$skill_name/SKILL.md
 done
 cp /tmp/dotnet-skills/agents/*.md ~/.config/opencode/agents/
 ```
