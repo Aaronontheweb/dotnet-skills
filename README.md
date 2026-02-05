@@ -130,7 +130,7 @@ Run `./scripts/generate-skill-index-snippets.sh --update-readme` to refresh the 
 |flow:{skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts}
 |route:
 |csharp:{modern-csharp-coding-standards,csharp-concurrency-patterns,api-design,type-design-performance}
-|aspnetcore-web:{aspire-integration-testing,aspire-service-defaults,mailpit-integration,mjml-email-templates}
+|aspnetcore-web:{aspire-integration-testing,aspire-configuration,aspire-service-defaults,mailpit-integration,mjml-email-templates}
 |data:{efcore-patterns,database-performance}
 |di-config:{microsoft-extensions-configuration,dependency-injection-patterns}
 |testing:{testcontainers-integration-tests,playwright-blazor-testing,snapshot-testing,verify-email-snapshots,playwright-ci-caching}
