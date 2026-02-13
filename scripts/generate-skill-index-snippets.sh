@@ -49,7 +49,7 @@ while IFS= read -r skill_dir; do
     ./skills/microsoft-extensions-*) di_config+=("$name") ;;
     ./skills/slopwatch|./skills/crap-analysis) quality_gates+=("$name") ;;
     ./skills/testcontainers|./skills/playwright-*|./skills/snapshot-*|./skills/verify-*) testing+=("$name") ;;
-    ./skills/project-structure|./skills/local-tools|./skills/package-management|./skills/serialization) dotnet+=("$name") ;;
+    ./skills/project-structure|./skills/local-tools|./skills/package-management|./skills/serialization|./skills/dotnet-devcert-*) dotnet+=("$name") ;;
     ./skills/marketplace-*|./skills/skills-index-*) meta+=("$name") ;;
     *) ;; # ignore
   esac

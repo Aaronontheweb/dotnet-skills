@@ -38,7 +38,8 @@
     "./skills/verify-email-snapshots",
     "./skills/playwright-ci-caching",
     "./skills/marketplace-publishing",
-    "./skills/skills-index-snippets"
+    "./skills/skills-index-snippets",
+    "./skills/dotnet-devcert-trust"
   ],
   "agents": [
     "./agents/akka-net-specialist.md",
