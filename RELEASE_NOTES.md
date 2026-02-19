@@ -1,5 +1,29 @@
 # Release Notes
 
+## v1.3.0 (2026-02-19)
+
+### New Skills
+
+- **ilspy-decompile** - Added skill for decompiling .NET assemblies with ILSpy, including prerequisites, quick start guide, common assembly locations, core workflow, and decompilation commands. ([#45](https://github.com/Aaronontheweb/dotnet-skills/pull/45))
+
+- **dotnet-devcert-trust** - Added skill for diagnosing and resolving HTTPS dev certificate trust failures on Linux. Covers the full 5-point diagnostic procedure, recovery workflow, distro-specific guidance (Ubuntu, Fedora, Arch, WSL2), and Aspire 13.1.0+ Redis TLS context. ([#44](https://github.com/Aaronontheweb/dotnet-skills/pull/44))
+
+### New Agents
+
+- **Roslyn Incremental Generator Specialist** - Added agent documenting the role and design principles for Roslyn incremental source generator development, including guidelines for maintainability and performance. ([#46](https://github.com/Aaronontheweb/dotnet-skills/pull/46))
+
+### Skill Enhancements
+
+- **BenchmarkDotNet guidelines** - Clarified correct usage of `[Benchmark(Baseline = true)]`: only one benchmark per category group may use `Baseline = true`. Documents the recommended pattern of using `[GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]` with `[CategoriesColumn]` to compare multiple implementations across scenarios. ([#41](https://github.com/Aaronontheweb/dotnet-skills/pull/41))
+
+### Bug Fixes
+
+- **OpenCode install script** - Fixed the OpenCode installation script to extract skill directory names from YAML frontmatter (`name` field in SKILL.md) rather than the filesystem directory name. OpenCode requires directory names to match the frontmatter `name` field (e.g., `akka-net-best-practices` rather than `akka-best-practices`). ([#40](https://github.com/Aaronontheweb/dotnet-skills/pull/40))
+
+- **Index generation script** - Fixed `generate-skill-index-snippets.sh` to use `python3` instead of `python`, resolving failures on systems where `python` is not in PATH or resolves to Python 2.
+
+---
+
 ## v1.2.0 (2026-02-05)
 
 ### Breaking Changes

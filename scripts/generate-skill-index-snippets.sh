@@ -83,7 +83,7 @@ EOF
 )"
 
 if $UPDATE_README; then
-  COMPRESSED="$compressed" README_PATH="$README_PATH" python - <<'PY'
+  COMPRESSED="$compressed" README_PATH="$README_PATH" python3 - <<'PY'
 import os
 import pathlib
 import re

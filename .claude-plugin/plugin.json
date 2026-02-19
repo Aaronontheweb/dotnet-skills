@@ -1,6 +1,6 @@
 {
   "name": "dotnet-skills",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Comprehensive .NET development skills and agents for Claude Code - covering C#, F#, Akka.NET, Aspire, testing frameworks, and specialized tools",
   "author": {
     "name": "Aaron Stannard",
@@ -39,13 +39,15 @@
     "./skills/playwright-ci-caching",
     "./skills/marketplace-publishing",
     "./skills/skills-index-snippets",
-    "./skills/dotnet-devcert-trust"
+    "./skills/dotnet-devcert-trust",
+    "./skills/ilspy-decompile"
   ],
   "agents": [
     "./agents/akka-net-specialist.md",
     "./agents/docfx-specialist.md",
     "./agents/dotnet-benchmark-designer.md",
     "./agents/dotnet-concurrency-specialist.md",
-    "./agents/dotnet-performance-analyst.md"
+    "./agents/dotnet-performance-analyst.md",
+    "./agents/roslyn-incremental-generator-specialist.md"
   ]
 }
