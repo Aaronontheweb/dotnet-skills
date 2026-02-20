@@ -111,7 +111,7 @@ Run `./scripts/generate-skill-index-snippets.sh --update-readme` to refresh the 
 |dotnet:{dotnet-project-structure,dotnet-local-tools,package-management,serialization,dotnet-devcert-trust}
 |quality-gates:{dotnet-slopwatch,crap-analysis}
 |meta:{marketplace-publishing,skills-index-snippets}
-|agents:{akka-net-specialist,docfx-specialist,dotnet-benchmark-designer,dotnet-concurrency-specialist,dotnet-performance-analyst}
+|agents:{akka-net-specialist,docfx-specialist,dotnet-benchmark-designer,dotnet-concurrency-specialist,dotnet-performance-analyst,roslyn-incremental-generator-specialist}
 ```
 <!-- END DOTNET-SKILLS COMPRESSED INDEX -->
 
