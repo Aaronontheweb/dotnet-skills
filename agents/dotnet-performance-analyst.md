@@ -59,6 +59,19 @@ You are a .NET performance analysis specialist with expertise in interpreting pr
 - Actionable optimization recommendations with code examples
 - Performance monitoring and alerting strategy design
 
+**Hot-Path Delegate Allocation Analysis:**
+- **Closure allocations**: Lambdas capturing outer variables allocate per invocation
+  - `context => next.Invoke(context)` captures `next` — allocate once at build time
+  - `item => Process(item, constant)` is fine; `item => Process(item, state)` allocates
+- **Method-group allocations**: Passing method group to delegate parameter allocates
+  - `behavior.Invoke(ctx, Next)` where `Next` is a method — cache as `Func<T, Task>` field
+  - Use static generic cache classes: `static class NextCache { public static readonly Func<T, Task> Next = ...; }`
+- **Bound vs unbound delegates**: `next.Invoke` (bound) vs `context => next.Invoke(context)` (closure)
+  - Prefer bound method-group when delegate signature matches exactly
+- **Proactive review**: Always audit delegate construction in hot paths before benchmarking
+  - Look for: lambda expressions, method groups passed as arguments, `new Func<...>`, `Delegate.CreateDelegate`
+  - Ask: "Does this allocate per call or per pipeline build?"
+
 **Common Performance Issues to Identify:**
 - **Sync-over-async deadlocks** and context switching overhead
 - **Boxing/unboxing** in hot paths and generic constraints
