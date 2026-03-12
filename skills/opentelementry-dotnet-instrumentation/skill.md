@@ -323,7 +323,7 @@ public void OrderProcessingSucceeded(string orderType, TimeSpan duration)
     );
 }
 
-// ❌ WRONG: High-cardinality dimensions
+// ❌ WRONG: High-cardinality dimensions (unbounded values cause cardinality explosion)
 public void OrderFailed(string orderId, string exceptionMessage)
 {
     failureCount.Add(1,
@@ -335,25 +335,13 @@ public void OrderFailed(string orderId, string exceptionMessage)
 
 **Rules**:
 - Dimensions MUST be predefined at instrument creation
-- Avoid dynamic/unbounded values (causes cardinality explosion)
+- Avoid dynamic/unbounded values (causes cardinality explosion: each unique value creates a new time series row)
 - High-cardinality dimensions MUST be opt-in configuration
 - Use low-cardinality identifiers: item type, queue name, outcome
 - Consistent dimension names across components: `myapp.region` means same thing everywhere
 - Avoid sensitive data
 - Consider [metric enrichment alternatives](https://github.com/open-telemetry/opentelemetry-dotnet/tree/main/docs/metrics#metrics-enrichment)
 - Users can enable [metric exemplars](https://github.com/open-telemetry/opentelemetry-dotnet/tree/main/docs/metrics#metrics-correlation) for correlation (not through dimensions)
-
-**Cardinality Explosion Example**:
-```
-| OrderType    | Region  | ExceptionType                      | Count |
-|--------------|---------|------------------------------------|-------|
-| Standard     | EU      | InvalidOperationException          | 6     |
-| Standard     | EU      | Exception                          | 8     |
-| Standard     | EU      | SqlException                       | 2     |
-| Express      | US      | Exception                          | 2     |
-| ...          | ...     | ...                                | ...   |
-```
-ExceptionType has too many possible values → each creates new row → explosion in storage/costs.
 
 ## Performance Requirements
 
@@ -376,15 +364,12 @@ var tags = new TagList
     { "outcome", "success" }
 };
 counter.Add(1, tags);
-
-// ❌ WRONG: Allocations when no listener
-var activity = ActivitySource.StartActivity("Operation"); // ❌ May allocate even if null
 ```
 
-### Timing Without Allocations
+### Timing
 
 ```csharp
-// ✅ CORRECT: Timestamp math (no allocation on .NET 10+)
+// ✅ CORRECT: Timestamp math (no allocation)
 var startTime = Stopwatch.GetTimestamp();
 try
 {
@@ -396,23 +381,14 @@ finally
     metrics.OrderProcessingSucceeded(orderType, duration);
 }
 
-// ❌ WRONG: Allocates Stopwatch object (pre-.NET 10)
+// ❌ WRONG: Allocates Stopwatch object
 var stopwatch = Stopwatch.StartNew(); // ❌ Allocates
-```
 
-### No Timing Wrappers
-
-```csharp
 // ❌ WRONG: IDisposable timing class (allocates per use)
 using (new MetricScope(metrics, "ProcessOrder")) // ❌ BAD
 {
     ProcessOrder();
 }
-
-// ✅ CORRECT: Explicit timing
-var start = Stopwatch.GetTimestamp();
-ProcessOrder();
-metrics.OrderProcessingCompleted(Stopwatch.GetElapsedTime(start));
 ```
 
 ### Avoid Hidden Allocations
@@ -437,30 +413,11 @@ if (activity?.IsAllDataRequested == true)
 }
 ```
 
-### Type Choice Guidelines
-
-```csharp
-// ✅ CORRECT: Use struct for immutable helpers in hot paths (if needed at all)
-public readonly struct ItemContext
-{
-    public string ItemId { get; init; }
-    public string ItemType { get; init; }
-}
-
-// ❌ WRONG: Don't use record/record struct unless you need value equality
-public record ItemContext(string Id, string Type); // ❌ Only if you need equality/with-expressions
-
-// ❌ WRONG: No class-based helpers in hot paths
-public class TagBuilder { } // ❌ Allocates
-```
-
 **Rules**:
 - No `Stopwatch.StartNew()` (use timestamp math)
 - No timing `IDisposable` wrappers as classes
 - Prefer `TagList` (struct) over arrays/dictionaries
 - No hidden work: avoid LINQ, string interpolation, async state machines in hot paths
-- Don't use `record`/`record struct` unless you need value-based equality
-- Avoid helper types that create temporary collections
 
 ## Testing Requirements
 
@@ -506,104 +463,6 @@ public void Should_not_introduce_breaking_changes_to_span_names()
 private static readonly ActivitySource ActivitySource = new("MyApp.MyComponent", "0.9.0");
 private readonly Meter meter = new("MyApp.MyComponent", "0.8.0");
 ```
-
-## Common Patterns
-
-### Full Processing Example
-
-```csharp
-public class OrderProcessor
-{
-    private static readonly ActivitySource ActivitySource = new("MyApp.OrderProcessing", "1.0.0");
-    private readonly OrderProcessingMetrics metrics;
-
-    public async Task ProcessAsync(Order order)
-    {
-        Activity? activity = null;
-        var startTime = Stopwatch.GetTimestamp();
-
-        try
-        {
-            if (ActivitySource.HasListeners())
-            {
-                activity = ActivitySource.StartActivity("ProcessOrder", ActivityKind.Internal);
-
-                if (activity?.IsAllDataRequested == true)
-                {
-                    activity.SetTag("myapp.order_id", order.Id);
-                    activity.SetTag("myapp.order_type", order.Type);
-                }
-            }
-
-            await ProcessInternalAsync(order);
-
-            activity?.SetStatus(ActivityStatusCode.Ok);
-
-            var duration = Stopwatch.GetElapsedTime(startTime);
-            metrics.OrderProcessingSucceeded(order.Type, duration);
-        }
-        catch (Exception ex)
-        {
-            if (activity != null)
-            {
-                activity.SetStatus(ActivityStatusCode.Error);
-                activity.SetTag("otel.status_code", "error");
-                activity.SetTag("otel.status_description", ex.Message);
-
-                activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
-                {
-                    ["exception.type"] = ex.GetType().FullName,
-                    ["exception.message"] = ex.Message,
-                    ["exception.stacktrace"] = ex.ToString()
-                }));
-            }
-
-            var duration = Stopwatch.GetElapsedTime(startTime);
-            metrics.OrderProcessingFailed(order.Type, ex, duration);
-
-            throw;
-        }
-        finally
-        {
-            activity?.Dispose();
-        }
-    }
-}
-```
-
-## Common Pitfalls
-
-❌ **Relying on Activity.Current for a specific span**
-- Other code may create intermediate spans in between
-- Solution: Pass Activity explicitly or store it in a dedicated context object
-
-❌ **Starting activities in async helper methods**
-- Breaks AsyncLocal behavior
-- Solution: Start activities only in top-level methods
-
-❌ **High-cardinality metric dimensions**
-- Causes cardinality explosion, telemetry loss, backend performance issues
-- Solution: Use low-cardinality identifiers, make contentious dimensions opt-in
-
-❌ **Not checking HasListeners/IsAllDataRequested**
-- Causes unnecessary allocations and computation
-- Solution: Always guard expensive operations
-
-❌ **Querying Activity tags**
-- Performance anti-pattern
-- Solution: Store needed values separately
-
-❌ **Using IDisposable timing helpers (classes)**
-- Allocates on every use
-- Solution: Use explicit Stopwatch.GetTimestamp()/GetElapsedTime()
-
-❌ **Setting non-characteristic attributes**
-- Clutters spans with irrelevant data
-- Solution: Only tag values specifically relevant to this activity
-
-❌ **Not setting Activity status on errors**
-- Breaks observability
-- Solution: Always set Error status and record exception events
 
 ## References
 
