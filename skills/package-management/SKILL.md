@@ -1,6 +1,6 @@
 ---
 name: package-management
-description: Manage NuGet packages using Central Package Management (CPM) and dotnet CLI commands. Never edit XML directly - use dotnet add/remove/list commands. Use shared version variables for related packages.
+description: "Manage NuGet packages using Central Package Management (CPM) and dotnet CLI commands. Never edit XML directly - use dotnet add/remove/list commands. Use shared version variables for related packages. Use when adding, removing, or updating NuGet packages, setting up Central Package Management, managing package versions across projects, or troubleshooting restore failures and version conflicts."
 invocable: false
 ---
 
@@ -13,6 +13,14 @@ Use this skill when:
 - Setting up Central Package Management (CPM) for a solution
 - Managing package versions across multiple projects
 - Troubleshooting package conflicts or restore issues
+
+## Workflow
+
+1. **Check for CPM** by looking for `Directory.Packages.props` with `ManagePackageVersionsCentrally`
+2. **Use `dotnet` CLI commands** exclusively -- never edit `.csproj` or `.props` XML by hand
+3. **Add packages** via `dotnet add package <name>` (handles CPM registration automatically)
+4. **Group related packages** with shared version variables in `Directory.Packages.props`
+5. **Verify** with `dotnet restore` and `dotnet list package --outdated` to confirm correct resolution
 
 ---
 

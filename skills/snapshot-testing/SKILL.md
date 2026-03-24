@@ -1,19 +1,19 @@
 ---
 name: snapshot-testing
-description: Use Verify for snapshot testing in .NET. Approve API surfaces, HTTP responses, rendered emails, and serialized outputs. Detect unintended changes through human-reviewed baseline files.
+description: "Use Verify for snapshot testing in .NET. Approve API surfaces, HTTP responses, rendered emails, and serialized outputs. Detect unintended changes through human-reviewed baseline files. Use when verifying rendered output, approving public API surfaces, testing HTTP responses, or validating serialization output against approved baselines."
 invocable: false
 ---
 
 # Snapshot Testing with Verify
 
-## When to Use This Skill
+## Workflow
 
-Use snapshot testing when:
-- Verifying rendered output (HTML emails, reports, generated code)
-- Approving public API surfaces for breaking change detection
-- Testing HTTP response bodies and headers
-- Validating serialization output
-- Catching unintended changes in complex objects
+1. **Install** - Add `Verify.Xunit` (or NUnit/MSTest variant) via NuGet; create `ModuleInitializer.cs` with `VerifyBase.UseProjectRelativeDirectory("Snapshots")`
+2. **Write test** - Call `Verify(object)` or `Verify(string, extension: "html")` to capture output
+3. **First run** - Test creates `.received.` file; review output and approve to create `.verified.` file
+4. **Scrub dynamic values** - Use `ScrubMember`, `ScrubMembersWithType<Guid>()`, or regex scrubbers for timestamps/tokens
+5. **CI integration** - Set `DiffRunner.Disabled = true` in CI; upload `.received.*` artifacts on failure
+6. **Validate changes** - When tests fail, review diff between `.received.` and `.verified.` files; accept only intentional changes
 
 ---
 

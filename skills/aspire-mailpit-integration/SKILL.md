@@ -1,35 +1,23 @@
 ---
 name: mailpit-integration
-description: Test email sending locally using Mailpit with .NET Aspire. Captures all outgoing emails without sending them. View rendered HTML, inspect headers, and verify delivery in integration tests.
+description: "Test email sending locally using Mailpit with .NET Aspire. Captures all outgoing emails without sending them. View rendered HTML, inspect headers, and verify delivery in integration tests. Use when adding local email testing to an Aspire app, writing integration tests that verify email content, or setting up SMTP capture for development."
 invocable: false
 ---
 
 # Email Testing with Mailpit and .NET Aspire
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Testing email delivery locally without sending real emails
-- Setting up email infrastructure in .NET Aspire
-- Writing integration tests that verify emails are sent
-- Debugging email rendering and headers
+1. **Add Mailpit container** - Register Mailpit in AppHost with SMTP (1025) and UI (8025) endpoints.
+2. **Configure SMTP settings** - Bind `SmtpSettings` options class to the `Smtp` configuration section.
+3. **Implement IEmailSender** - Wire up MailKit `SmtpClient` using the options.
+4. **Write integration tests** - Use `MailpitClient` API to assert emails were sent with correct recipients, subjects, and body content.
+5. **Validate** - Confirm emails appear in Mailpit UI at `http://localhost:8025` and pass automated assertions.
 
 **Related skills:**
 - `aspnetcore/mjml-email-templates` - MJML template authoring
 - `testing/verify-email-snapshots` - Snapshot test rendered HTML
 - `aspire/integration-testing` - General Aspire testing patterns
-
----
-
-## What is Mailpit?
-
-[Mailpit](https://github.com/axllent/mailpit) is a lightweight email testing tool that:
-- Captures all SMTP traffic without delivering emails
-- Provides a web UI to view captured emails
-- Exposes an API for programmatic access
-- Supports HTML rendering, headers, and attachments
-
-Perfect for development and integration testing.
 
 ---
 

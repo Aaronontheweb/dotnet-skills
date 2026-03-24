@@ -1,12 +1,19 @@
 ---
 name: marketplace-publishing
-description: Workflow for publishing skills and agents to the dotnet-skills Claude Code marketplace. Covers adding new content, updating plugin.json, validation, and release tagging.
+description: "Workflow for publishing skills and agents to the dotnet-skills Claude Code marketplace. Covers adding new content, updating plugin.json, validation, and release tagging. Use when publishing a skill or agent to the marketplace, adding new content to plugin.json, validating marketplace structure, or creating a release tag."
 invocable: true
 ---
 
 # Marketplace Publishing Workflow
 
-This skill documents how to publish skills and agents to the dotnet-skills Claude Code marketplace.
+## Workflow
+
+1. **Choose a category** for the skill or agent
+2. **Create the skill/agent file** with valid YAML frontmatter
+3. **Register in plugin.json** by adding the path to the appropriate array
+4. **Validate** by running `./scripts/validate-marketplace.sh`
+5. **Commit together** (content file + plugin.json)
+6. **Tag and release** using semver format for publishing
 
 ## Repository Structure
 

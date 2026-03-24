@@ -1,6 +1,6 @@
 ---
 name: akka-hosting-actor-patterns
-description: Patterns for building entity actors with Akka.Hosting - GenericChildPerEntityParent, message extractors, cluster sharding abstraction, akka-reminders, and ITimeProvider. Supports both local testing and clustered production modes.
+description: "Patterns for building entity actors with Akka.Hosting - GenericChildPerEntityParent, message extractors, cluster sharding abstraction, akka-reminders, and ITimeProvider. Supports both local testing and clustered production modes. Use when building entity actors, setting up cluster sharding, configuring scheduled reminders, or creating actors that work in both test and production modes."
 invocable: false
 ---
 
@@ -442,15 +442,6 @@ public sealed class OrderProcessingActor : ReceiveActor
 }
 ```
 
-### Why This Pattern
-
-| Benefit | Explanation |
-|---------|-------------|
-| **Fresh DbContext per message** | No stale entity tracking between messages |
-| **Proper disposal** | Database connections released after each message |
-| **Isolation** | One message's errors don't corrupt another's state |
-| **Testable** | Can inject mock IServiceProvider in tests |
-
 ### Singleton Services - Direct Injection
 
 For stateless, thread-safe services, inject directly (no scope needed):
@@ -600,6 +591,19 @@ builder.WithShardRegion<OrderActorRegion>("orders", ...);
 ```
 
 ---
+
+## Implementation Workflow
+
+1. **Define message types** - Create strongly-typed IDs and message interfaces (e.g., `IWithOrderId`)
+   - Validate: Message extractor returns correct entity IDs for all message types
+2. **Create entity actor** - Implement the actor with `ReceiveActor` or `ReceivePersistentActor`
+   - Validate: Actor handles expected messages and replies correctly in isolation
+3. **Build Akka.Hosting extension method** - Wire `GenericChildPerEntityParent` (local) and `WithShardRegion` (clustered) behind `AkkaExecutionMode`
+   - Validate: Actor resolves from `ActorRegistry` in both execution modes
+4. **Register in DI** - Compose extension methods in `Program.cs` or test setup
+   - Validate: `IRequiredActor<T>` resolves the correct actor reference
+5. **Add reminders (if needed)** - Configure `akka-reminders` with appropriate storage backend
+   - Validate: Scheduled reminders fire and route to correct entity actors
 
 ## Best Practices
 

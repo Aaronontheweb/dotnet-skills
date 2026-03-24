@@ -1,19 +1,18 @@
 ---
 name: serialization
-description: Choose the right serialization format for .NET applications. Prefer schema-based formats (Protobuf, MessagePack) over reflection-based (Newtonsoft.Json). Use System.Text.Json with AOT source generators for JSON scenarios.
+description: "Choose the right serialization format for .NET applications. Prefer schema-based formats (Protobuf, MessagePack) over reflection-based (Newtonsoft.Json). Use System.Text.Json with AOT source generators for JSON scenarios. Use when choosing a serialization format, migrating from Newtonsoft.Json, implementing AOT-compatible serialization, or designing wire formats for distributed systems."
 invocable: false
 ---
 
 # Serialization in .NET
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Choosing a serialization format for APIs, messaging, or persistence
-- Migrating from Newtonsoft.Json to System.Text.Json
-- Implementing AOT-compatible serialization
-- Designing wire formats for distributed systems
-- Optimizing serialization performance
+1. **Choose format** - Select based on use case: System.Text.Json for REST APIs, Protobuf for gRPC/event sourcing, MessagePack for high-performance messaging
+2. **Define schema** - Create source-generated `JsonSerializerContext`, `.proto` files, or `[MessagePackObject]` contracts with explicit field keys
+3. **Implement serialization** - Wire up serializer with proper options; register context in ASP.NET Core pipeline if applicable
+4. **Handle versioning** - Use additive-only field changes; reserve removed field numbers; deploy readers before writers
+5. **Validate** - Verify round-trip serialization; test backward compatibility with older message versions
 
 ---
 

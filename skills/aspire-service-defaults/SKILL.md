@@ -1,31 +1,19 @@
 ---
 name: aspire-service-defaults
-description: Create a shared ServiceDefaults project for Aspire applications. Centralizes OpenTelemetry, health checks, resilience, and service discovery configuration across all services.
+description: "Create a shared ServiceDefaults project for Aspire applications. Centralizes OpenTelemetry, health checks, resilience, and service discovery configuration across all services. Use when setting up cross-cutting concerns for Aspire services, adding observability with OpenTelemetry, configuring health check endpoints, or standardizing HttpClient resilience policies."
 invocable: false
 ---
 
 # Aspire Service Defaults
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Building Aspire-based distributed applications
-- Need consistent observability (logging, tracing, metrics) across services
-- Want shared health check configuration
-- Configuring HttpClient resilience and service discovery
-
----
-
-## What is ServiceDefaults?
-
-ServiceDefaults is a shared project that provides common configuration for all services in an Aspire application:
-
-- **OpenTelemetry** - Logging, tracing, and metrics
-- **Health Checks** - Readiness and liveness endpoints
-- **Service Discovery** - Automatic service resolution
-- **HTTP Resilience** - Retry and circuit breaker policies
-
-Every service references this project and calls `AddServiceDefaults()`.
+1. **Create ServiceDefaults project** - Add a shared project with `<IsAspireSharedProject>true</IsAspireSharedProject>` and required OpenTelemetry/resilience packages.
+2. **Implement `AddServiceDefaults()`** - Wire up OpenTelemetry (logging, tracing, metrics), health checks, service discovery, and HTTP resilience in a single extension method.
+3. **Implement `MapDefaultEndpoints()`** - Map `/health` (readiness) and `/alive` (liveness) endpoints.
+4. **Reference from all services** - Each service project calls `builder.AddServiceDefaults()` and `app.MapDefaultEndpoints()`.
+5. **Add custom health checks** - Register database, Redis, or domain-specific checks with appropriate tags (`live`, `ready`).
+6. **Validate** - Confirm telemetry flows to Aspire Dashboard and health endpoints return expected status.
 
 ---
 

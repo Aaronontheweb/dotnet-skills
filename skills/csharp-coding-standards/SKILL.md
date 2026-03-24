@@ -1,6 +1,6 @@
 ---
 name: modern-csharp-coding-standards
-description: Write modern, high-performance C# code using records, pattern matching, value objects, async/await, Span<T>/Memory<T>, and best-practice API design patterns. Emphasizes functional-style programming with C# 12+ features.
+description: "Write modern, high-performance C# code using records, pattern matching, value objects, async/await, Span and Memory types, and best-practice API design patterns. Emphasizes functional-style programming with C# 12+ features. Use when writing new C# code, refactoring for modern idioms, optimizing performance-critical paths, or designing domain models with strong typing."
 invocable: false
 ---
 

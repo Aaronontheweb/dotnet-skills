@@ -1,19 +1,19 @@
 ---
 name: api-design
-description: Design stable, compatible public APIs using extend-only design principles. Manage API compatibility, wire compatibility, and versioning for NuGet packages and distributed systems.
+description: "Design stable, compatible public APIs using extend-only design principles. Manage API compatibility, wire compatibility, and versioning for NuGet packages and distributed systems. Use when designing or modifying public C# APIs, reviewing PRs for breaking changes, planning wire format migrations, or implementing semantic versioning for a library."
 invocable: false
 ---
 
 # Public API Design and Compatibility
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Designing public APIs for NuGet packages or libraries
-- Making changes to existing public APIs
-- Planning wire format changes for distributed systems
-- Implementing versioning strategies
-- Reviewing pull requests for breaking changes
+1. **Classify the change** - Determine if it affects API/source compatibility, binary compatibility, or wire compatibility.
+2. **Apply extend-only rules** - Add new overloads or types instead of modifying or removing existing signatures.
+3. **Deprecate before removing** - Mark old APIs with `[Obsolete("since vX.Y")]` and provide the replacement.
+4. **Update API approval tests** - Run `PublicApiGenerator` tests and review `.verified.txt` diffs.
+5. **Validate wire compatibility** - For serialized formats, deploy read-side support first, then enable write-side in a later release.
+6. **Review checklist** - Confirm no removed public members, no changed signatures, no new required parameters without defaults.
 
 ---
 

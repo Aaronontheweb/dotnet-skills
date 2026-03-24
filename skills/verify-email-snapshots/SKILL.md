@@ -1,18 +1,19 @@
 ---
 name: verify-email-snapshots
-description: Snapshot test email templates using Verify to catch regressions. Validates rendered HTML output matches approved baseline. Works with MJML templates and any email renderer.
+description: "Snapshot test email templates using Verify to catch regressions. Validates rendered HTML output matches approved baseline. Works with MJML templates and any email renderer. Use when testing email template rendering, validating MJML-to-HTML compilation, reviewing email changes in code review, or ensuring variable substitution works correctly."
 invocable: false
 ---
 
 # Snapshot Testing Email Templates with Verify
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Testing email template rendering for regressions
-- Validating MJML templates compile to expected HTML
-- Reviewing email changes in code review (diffs are visual)
-- Ensuring variable substitution works correctly
+1. **Install** - Add `Verify.Xunit` via NuGet; set up `EmailTestFixture` with `IAsyncLifetime` for service registration
+2. **Write tests** - Create a test per template variant; render with sample variables and call `Verify(html, extension: "html")`
+3. **First run** - Review generated `.received.html` in browser; approve to create `.verified.html` baseline
+4. **Scrub dynamic values** - Use `ScrubLinesContaining` or regex scrubbers for timestamps, tokens, and GUIDs
+5. **Review changes** - When tests fail, diff `.received.html` vs `.verified.html`; accept only intentional changes
+6. **CI integration** - Set `VerifierSettings.ThrowOnMissingVerifiedFile()` and upload snapshot artifacts on failure
 
 **Related skills:**
 - `aspnetcore/mjml-email-templates` - MJML template authoring

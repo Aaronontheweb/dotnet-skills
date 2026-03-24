@@ -1,39 +1,29 @@
 ---
 name: crap-analysis
-description: Analyze code coverage and CRAP (Change Risk Anti-Patterns) scores to identify high-risk code. Use OpenCover format with ReportGenerator for Risk Hotspots showing cyclomatic complexity and untested code paths.
+description: "Analyze code coverage and CRAP (Change Risk Anti-Patterns) scores to identify high-risk code. Use OpenCover format with ReportGenerator for Risk Hotspots showing cyclomatic complexity and untested code paths. Use when setting up coverage collection, evaluating code quality before changes, or identifying risky untested code that needs refactoring."
 invocable: true
 ---
 
 # CRAP Score Analysis
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Evaluating code quality and test coverage before changes
-- Identifying high-risk code that needs refactoring or testing
-- Setting up coverage collection for a .NET project
-- Prioritizing which code to test based on risk
-- Establishing coverage thresholds for CI/CD pipelines
+1. **Set up coverage collection** - Create `coverage.runsettings` with OpenCover format (required for CRAP)
+2. **Install ReportGenerator** - Add as local tool via `.config/dotnet-tools.json`
+3. **Run tests with coverage** - Execute `dotnet test` with `--collect:"XPlat Code Coverage"`
+4. **Generate report** - Run `dotnet reportgenerator` with OpenCover XML inputs
+5. **Analyze Risk Hotspots** - Review methods with CRAP > 30, prioritize testing/refactoring
+6. **Validate** - Confirm CRAP scores meet thresholds (< 30 for new code, < 60 for legacy)
 
----
+## CRAP Score Reference
 
-## What is CRAP?
-
-**CRAP Score = Complexity x (1 - Coverage)^2**
-
-The CRAP (Change Risk Anti-Patterns) score combines cyclomatic complexity with test coverage to identify risky code.
+**Formula:** `CRAP Score = Complexity x (1 - Coverage)^2`
 
 | CRAP Score | Risk Level | Action Required |
 |------------|------------|-----------------|
 | **< 5** | Low | Well-tested, maintainable code |
 | **5-30** | Medium | Acceptable but watch complexity |
 | **> 30** | High | Needs tests or refactoring |
-
-### Why CRAP Matters
-
-- **High complexity + low coverage = danger**: Code that's hard to understand AND untested is risky to modify
-- **Complexity alone isn't enough**: A complex method with 100% coverage is safer than a simple method with 0%
-- **Focuses effort**: Prioritize testing on complex code, not simple getters/setters
 
 ### CRAP Score Examples
 

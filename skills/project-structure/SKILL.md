@@ -1,20 +1,19 @@
 ---
 name: dotnet-project-structure
-description: Modern .NET project structure including .slnx solution format, Directory.Build.props, central package management, SourceLink, version management with RELEASE_NOTES.md, and SDK pinning with global.json.
+description: "Modern .NET project structure including .slnx solution format, Directory.Build.props, central package management, SourceLink, version management with RELEASE_NOTES.md, and SDK pinning with global.json. Use when setting up a new .NET solution, configuring centralized build properties, implementing CPM, or migrating from .sln to .slnx."
 invocable: false
 ---
 
 # .NET Project Structure and Build Configuration
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Setting up a new .NET solution with modern best practices
-- Configuring centralized build properties across multiple projects
-- Implementing central package version management
-- Setting up SourceLink for debugging and NuGet packages
-- Automating version management with release notes
-- Pinning SDK versions for consistent builds
+1. **Create solution** - Use `dotnet new sln --format slnx` (.NET 9+) or `dotnet sln migrate` for existing solutions
+2. **Add Directory.Build.props** - Configure centralized metadata, language settings, SourceLink, and reusable target framework properties
+3. **Set up CPM** - Create `Directory.Packages.props` with `ManagePackageVersionsCentrally` and define all package versions centrally
+4. **Pin SDK** - Add `global.json` with `rollForward: latestFeature` for consistent builds
+5. **Configure versioning** - Set up `RELEASE_NOTES.md` parsing with `build.ps1` for automated version management
+6. **Validate** - Run `dotnet build` to confirm all projects resolve packages and build correctly
 
 ## Related Skills
 

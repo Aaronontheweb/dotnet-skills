@@ -1,6 +1,6 @@
 ---
 name: microsoft-extensions-configuration
-description: Microsoft.Extensions.Options patterns including IValidateOptions, strongly-typed settings, validation on startup, and the Options pattern for clean configuration management.
+description: "Microsoft.Extensions.Options patterns including IValidateOptions, strongly-typed settings, validation on startup, and the Options pattern for clean configuration management. Use when binding appsettings.json to typed classes, validating configuration at startup, implementing IValidateOptions, or choosing between IOptions, IOptionsSnapshot, and IOptionsMonitor."
 invocable: false
 ---
 
@@ -19,27 +19,14 @@ Use this skill when:
 
 - [advanced-patterns.md](advanced-patterns.md): Validators with dependencies, named options, complete production example (AkkaSettings), and testing validators
 
-## Why Configuration Validation Matters
+## Workflow
 
-**The Problem:** Applications often fail at runtime due to misconfiguration - missing connection strings, invalid URLs, out-of-range values. These failures happen deep in business logic, far from where configuration is loaded.
-
-**The Solution:** Validate configuration at startup. If invalid, fail immediately with a clear error message.
-
-```csharp
-// BAD: Fails at runtime when someone tries to use the service
-public class EmailService
-{
-    public EmailService(IOptions<SmtpSettings> options)
-    {
-        var settings = options.Value;
-        // Throws NullReferenceException 10 minutes into production
-        _client = new SmtpClient(settings.Host, settings.Port);
-    }
-}
-
-// GOOD: Fails at startup with clear error
-// "SmtpSettings validation failed: Host is required"
-```
+1. **Define a settings class** with a `SectionName` constant and sensible defaults
+2. **Bind from configuration** using `AddOptions<T>().BindConfiguration()`
+3. **Add validation** via Data Annotations or `IValidateOptions<T>` for complex rules
+4. **Call `.ValidateOnStart()`** to fail fast on invalid configuration
+5. **Inject `IOptions<T>`** (or `IOptionsSnapshot<T>` / `IOptionsMonitor<T>`) into consuming services
+6. **Verify** the application fails at startup with a clear message if configuration is invalid
 
 ---
 

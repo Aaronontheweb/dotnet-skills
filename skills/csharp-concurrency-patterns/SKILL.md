@@ -1,19 +1,18 @@
 ---
 name: csharp-concurrency-patterns
-description: Choosing the right concurrency abstraction in .NET - from async/await for I/O to Channels for producer/consumer to Akka.NET for stateful entity management. Avoid locks and manual synchronization unless absolutely necessary.
+description: "Choose the right concurrency abstraction in .NET - from async/await for I/O to Channels for producer/consumer to Akka.NET for stateful entity management. Avoid locks and manual synchronization unless absolutely necessary. Use when deciding between async/await, Channels, Parallel.ForEachAsync, or Akka.NET actors, implementing producer/consumer patterns, or replacing locks with message-passing designs."
 invocable: false
 ---
 
 # .NET Concurrency: Choosing the Right Tool
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Deciding how to handle concurrent operations in .NET
-- Evaluating whether to use async/await, Channels, Akka.NET, or other abstractions
-- Tempted to use locks, semaphores, or other synchronization primitives
-- Need to process streams of data with backpressure, batching, or debouncing
-- Managing state across multiple concurrent entities
+1. **Identify the concurrency need** - Classify as I/O-bound, CPU-bound, producer/consumer, stream processing, or stateful entity management.
+2. **Consult the decision tree** - Start with async/await; escalate to Channels, Parallel.ForEachAsync, or Akka.NET only when needed.
+3. **Eliminate shared mutable state** - Redesign with immutability, message passing, or actor isolation before reaching for locks.
+4. **Implement the pattern** - Apply the selected abstraction using the examples below.
+5. **Validate** - Confirm no deadlocks, race conditions, or blocking-on-async anti-patterns exist.
 
 ## Reference Files
 

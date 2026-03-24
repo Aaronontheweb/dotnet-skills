@@ -1,21 +1,21 @@
 ---
 name: database-performance
-description: Database access patterns for performance. Separate read/write models, avoid N+1 queries, use AsNoTracking, apply row limits, and never do application-side joins. Works with EF Core and Dapper.
+description: "Database access patterns for performance. Separate read/write models, avoid N+1 queries, use AsNoTracking, apply row limits, and never do application-side joins. Works with EF Core and Dapper. Use when designing data access layers, optimizing slow queries, fixing N+1 problems, or choosing between EF Core and Dapper."
 invocable: false
 tags: [cqrs, performance, patterns]
 ---
 
 # Database Performance Patterns
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Designing data access layers
-- Optimizing slow database queries
-- Choosing between EF Core and Dapper
-- Avoiding common performance pitfalls
-
----
+1. **Separate read/write models** - Define distinct interfaces (`IUserReadStore`, `IUserWriteStore`) with purpose-built DTOs
+2. **Add row limits** - Ensure every read method has a required `limit` parameter
+3. **Enable AsNoTracking** - Set `QueryTrackingBehavior.NoTracking` as default on DbContext
+4. **Eliminate N+1 queries** - Replace loop-based fetches with `.Include()` or batch queries
+5. **Move joins to SQL** - Replace in-memory LINQ joins with SQL `JOIN` clauses
+6. **Use projections** - Select only needed columns via `.Select()` instead of loading full entities
+7. **Validate** - Profile queries to confirm no unbounded result sets or Cartesian explosions remain
 
 ## Core Principles
 

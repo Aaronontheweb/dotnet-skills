@@ -1,6 +1,6 @@
 ---
 name: dependency-injection-patterns
-description: Organize DI registrations using IServiceCollection extension methods. Group related services into composable Add* methods for clean Program.cs and reusable configuration in tests.
+description: "Organize DI registrations using IServiceCollection extension methods. Group related services into composable Add* methods for clean Program.cs and reusable configuration in tests. Use when structuring dependency injection in ASP.NET Core, creating IServiceCollection extension methods, choosing service lifetimes, or refactoring a large Program.cs."
 invocable: false
 ---
 
@@ -17,6 +17,17 @@ Use this skill when:
 ## Reference Files
 
 - [advanced-patterns.md](advanced-patterns.md): Testing with DI extensions, Akka.NET actor scope management, conditional/factory/keyed registration patterns
+
+---
+
+## Workflow
+
+1. **Identify service groups** by domain feature (users, orders, email, etc.)
+2. **Create extension methods** as `Add{Feature}Services()` returning `IServiceCollection`
+3. **Place extensions near their services** in `{Feature}ServiceCollectionExtensions.cs`
+4. **Compose in Program.cs** by chaining `Add*` calls
+5. **Reuse in tests** by calling the same extensions with overrides
+6. **Verify** correct lifetimes: Singleton for stateless, Scoped for per-request, Transient for lightweight
 
 ---
 

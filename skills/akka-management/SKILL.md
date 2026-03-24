@@ -1,6 +1,6 @@
 ---
 name: akka-net-management
-description: Akka.Management for cluster bootstrapping, service discovery (Kubernetes, Azure, Config), health checks, and dynamic cluster formation without static seed nodes.
+description: "Akka.Management for cluster bootstrapping, service discovery (Kubernetes, Azure, Config), health checks, and dynamic cluster formation without static seed nodes. Use when deploying Akka.NET clusters to Kubernetes, replacing static seed nodes with dynamic discovery, configuring health endpoints, or setting up Azure Table Storage discovery."
 invocable: false
 ---
 
@@ -211,6 +211,19 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 ```
 
 ---
+
+## Implementation Workflow
+
+1. **Add NuGet packages** - Install `Akka.Management`, `Akka.Management.Cluster.Bootstrap`, and your chosen discovery provider
+   - Validate: Packages restore without version conflicts
+2. **Configure management endpoint** - Set up `WithAkkaManagement()` with hostname and port bindings
+   - Validate: Management HTTP endpoint responds on configured port (default 8558)
+3. **Configure cluster bootstrap** - Set `ServiceName`, `RequiredContactPointsNr`, and `StableMargin`
+   - Validate: Bootstrap logs show contact point probing activity
+4. **Configure discovery provider** - Wire Kubernetes, Azure, or Config-based discovery
+   - Validate: Discovery returns expected node list (check management `/cluster/members`)
+5. **Add health checks** - Configure liveness and readiness endpoints
+   - Validate: `/health/live` returns 200, `/health/ready` returns 200 after cluster formation
 
 ## Troubleshooting
 

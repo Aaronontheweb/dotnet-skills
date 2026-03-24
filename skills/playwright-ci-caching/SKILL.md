@@ -1,33 +1,17 @@
 ---
 name: playwright-ci-caching
-description: Cache Playwright browser binaries in CI/CD pipelines (GitHub Actions, Azure DevOps) to avoid 1-2 minute download overhead on every build.
+description: "Cache Playwright browser binaries in CI/CD pipelines (GitHub Actions, Azure DevOps) to avoid 1-2 minute download overhead on every build. Use when setting up CI for Playwright E2E tests, optimizing build times, or configuring browser caching with automatic version-based cache invalidation."
 invocable: false
 ---
 
 # Caching Playwright Browsers in CI/CD
 
-## When to Use This Skill
-
-Use this skill when:
-- Setting up CI/CD for a project with Playwright E2E tests
-- Build times are slow due to browser downloads (~400MB, 1-2 minutes)
-- You want automatic cache invalidation when Playwright version changes
-- Using GitHub Actions or Azure DevOps pipelines
-
-## The Problem
-
-Playwright browsers (~400MB) must be downloaded on every CI run by default. This:
-- Adds 1-2 minutes to every build
-- Wastes bandwidth
-- Can fail on transient network issues
-- Slows down PR feedback loops
-
-## Core Pattern
+## Workflow
 
 1. **Extract Playwright version** from `Directory.Packages.props` (CPM) to use as cache key
-2. **Cache browser binaries** using platform-appropriate paths
-3. **Conditional install** - only download on cache miss
-4. **Automatic cache bust** - key includes version, so package upgrades invalidate cache
+2. **Configure cache step** - Use `actions/cache@v4` (GitHub Actions) or `Cache@2` (Azure DevOps) with OS-appropriate paths
+3. **Conditional install** - Only run `playwright install --with-deps` on cache miss
+4. **Validate** - Verify cache hits in CI logs; confirm browser version matches SDK version
 
 ## Cache Paths by OS
 

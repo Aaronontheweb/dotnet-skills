@@ -1,20 +1,18 @@
 ---
 name: dotnet-slopwatch
-description: Use Slopwatch to detect LLM reward hacking in .NET code changes. Run after every code modification to catch disabled tests, suppressed warnings, empty catch blocks, and other shortcuts that mask real problems.
+description: "Use Slopwatch to detect LLM reward hacking in .NET code changes. Run after every code modification to catch disabled tests, suppressed warnings, empty catch blocks, and other shortcuts that mask real problems. Use when an LLM modifies C# source files, project files, props files, or test files to validate no slop was introduced."
 invocable: true
 ---
 
 # Slopwatch: LLM Anti-Cheat for .NET
 
-## When to Use This Skill
+## Workflow
 
-**Use this skill constantly.** Every time an LLM (including Claude) makes changes to:
-- C# source files (.cs)
-- Project files (.csproj)
-- Props files (Directory.Build.props, Directory.Packages.props)
-- Test files
-
-Run slopwatch to validate the changes don't introduce "slop."
+1. **Install** - Add `slopwatch.cmd` to `.config/dotnet-tools.json` and run `dotnet tool restore`
+2. **Baseline** - Run `slopwatch init` on existing code to capture pre-existing issues; commit `.slopwatch/baseline.json`
+3. **Analyze** - After every LLM code change, run `slopwatch analyze` (or `--fail-on warning` for strict mode)
+4. **Fix flagged issues** - Do not ignore detections; require proper fixes instead of shortcuts
+5. **Integrate** - Add as Claude Code hook (`PostToolUse`) and CI pipeline step for continuous enforcement
 
 ## What is Slop?
 

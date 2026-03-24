@@ -1,24 +1,21 @@
 ---
 name: dotnet-local-tools
-description: Managing local .NET tools with dotnet-tools.json for consistent tooling across development environments and CI/CD pipelines.
+description: "Managing local .NET tools with dotnet-tools.json for consistent tooling across development environments and CI/CD pipelines. Use when setting up project-specific CLI tools like docfx, dotnet-ef, or reportgenerator, ensuring CI/CD uses the same tool versions as local development, or resolving global tool version conflicts."
 invocable: false
 ---
 
 # .NET Local Tools
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Setting up consistent tooling across a development team
-- Ensuring CI/CD pipelines use the same tool versions as local development
-- Managing project-specific CLI tools (docfx, incrementalist, dotnet-ef, etc.)
-- Avoiding global tool version conflicts between projects
+1. **Initialize manifest** - Run `dotnet new tool-manifest` to create `.config/dotnet-tools.json`
+2. **Install tools** - Run `dotnet tool install <tool-name>` for each required tool (pinned version)
+3. **Configure manifest** - Verify `isRoot: true` and `rollForward: false` for reproducibility
+4. **Restore in CI** - Add `dotnet tool restore` as the first step in CI/CD pipelines
+5. **Maintain versions** - Use `dotnet tool update <tool-name>` or Dependabot for updates
+6. **Validate** - Run `dotnet tool list` to confirm all tools restored at correct versions
 
-## What Are Local Tools?
-
-Local tools are .NET CLI tools that are installed and versioned per-repository rather than globally. They're defined in `.config/dotnet-tools.json` and restored with `dotnet tool restore`.
-
-### Local vs Global Tools
+## Local vs Global Tools
 
 | Aspect | Global Tools | Local Tools |
 |--------|--------------|-------------|
@@ -30,7 +27,7 @@ Local tools are .NET CLI tools that are installed and versioned per-repository r
 
 ---
 
-## Setting Up Local Tools
+## Setup
 
 ### Initialize the Manifest
 

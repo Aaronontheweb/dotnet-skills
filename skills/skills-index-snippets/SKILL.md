@@ -1,18 +1,19 @@
 ---
 name: skills-index-snippets
-description: Create and maintain AGENTS.md / CLAUDE.md snippet indexes that route tasks to the correct dotnet-skills skills and agents (including compressed Vercel-style indexes).
+description: "Create and maintain AGENTS.md / CLAUDE.md snippet indexes that route tasks to the correct dotnet-skills skills and agents, including compressed Vercel-style indexes. Use when adding, removing, or renaming skills or agents, updating plugin.json, or generating copy-paste routing snippets for downstream repositories."
 invocable: false
 ---
 
 # Maintaining Skill Index Snippets (AGENTS.md / CLAUDE.md)
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Adding, removing, or renaming any skills or agents in this repository
-- Updating `.claude-plugin/plugin.json`
-- Creating copy/paste snippets for downstream repositories (OpenCode, Claude Code, etc.)
-- You want a compact, always-on index that improves skill utilization
+1. **Update registry** - Add or remove skill/agent paths in `.claude-plugin/plugin.json`
+2. **Verify frontmatter** - Ensure each skill has a correct `name:` field matching the ID used in routing snippets
+3. **Run validation** - Execute `./scripts/validate-marketplace.sh` to confirm registry integrity
+4. **Regenerate index** - Run `./scripts/generate-skill-index-snippets.sh --update-readme` to update the compressed snippet
+5. **Update routing** - Add new skills to the appropriate category in the readable or compressed snippet template
+6. **Commit together** - Include plugin.json, SKILL.md, and README.md changes in a single commit
 
 ## Goal
 

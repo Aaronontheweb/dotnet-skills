@@ -1,6 +1,6 @@
 ---
 name: mjml-email-templates
-description: Build responsive email templates using MJML markup language. Compiles to cross-client HTML that works in Outlook, Gmail, and Apple Mail. Includes template renderer, layout patterns, and variable substitution.
+description: "Build responsive email templates using MJML markup language. Compiles to cross-client HTML that works in Outlook, Gmail, and Apple Mail. Includes template renderer, layout patterns, and variable substitution. Use when creating transactional email templates, setting up MJML rendering in .NET with Mjml.Net, building email layouts with variable substitution, or composing emails with strongly-typed value objects."
 invocable: false
 ---
 
@@ -19,11 +19,20 @@ Use this skill when:
 
 ---
 
+## Workflow
+
+1. **Install Mjml.Net** via `dotnet add package Mjml.Net`
+2. **Create a layout template** (`_Layout.mjml`) with header, content placeholder, and footer
+3. **Create content templates** per email type (signup, password reset, etc.) using MJML components
+4. **Implement `IMjmlTemplateRenderer`** to load templates, inject content into layout, substitute variables, and compile to HTML
+5. **Create email composers** with strongly-typed value objects for each email type
+6. **Verify** rendered output across email clients (Outlook, Gmail, Apple Mail)
+
+---
+
 ## Why MJML?
 
-**Problem**: Email HTML is notoriously difficult. Each email client (Outlook, Gmail, Apple Mail) renders differently, requiring complex table-based layouts and inline styles.
-
-**Solution**: [MJML](https://mjml.io/) is a markup language that compiles to responsive, cross-client HTML:
+[MJML](https://mjml.io/) is a markup language that compiles to responsive, cross-client HTML:
 
 ```mjml
 <!-- MJML - simple and readable -->

@@ -1,18 +1,18 @@
 ---
 name: aspire-configuration
-description: Configure Aspire AppHost to emit explicit app config via environment variables; keep app code free of Aspire clients and service discovery.
+description: "Configure Aspire AppHost to emit explicit app config via environment variables; keep app code free of Aspire clients and service discovery. Use when wiring AppHost resources to application configuration, setting up environment variables for Aspire projects, ensuring production parity for config, or avoiding Aspire client packages in app code."
 invocable: false
 ---
 
 # Aspire Configuration
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Wiring AppHost resources to application configuration in Aspire-based repos
-- Ensuring production configuration is transparent and portable outside of Aspire
-- Avoiding Aspire client/service-discovery packages inside application code
-- Designing feature toggles for dev/test without changing app code paths
+1. **Identify resources** - List all Aspire resources (databases, containers, services) the app needs.
+2. **Map to config keys** - For each resource, define explicit environment variable names using `WithEnvironment(...)`.
+3. **Bind in app code** - Use `IOptions<T>` with `BindConfiguration(...)` and `ValidateOnStart()` in the application project.
+4. **Validate** - Confirm no Aspire client or service-discovery packages are referenced in application projects.
+5. **Test parity** - Verify all injected values can be reproduced via plain environment variables or config files without Aspire.
 
 ---
 

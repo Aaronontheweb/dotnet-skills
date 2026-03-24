@@ -1,6 +1,6 @@
 ---
 name: akka-net-aspire-configuration
-description: Configure Akka.NET with .NET Aspire for local development and production deployments. Covers actor system setup, clustering, persistence, Akka.Management integration, and Aspire orchestration patterns.
+description: "Configure Akka.NET with .NET Aspire for local development and production deployments. Covers actor system setup, clustering, persistence, Akka.Management integration, and Aspire orchestration patterns. Use when setting up Akka.NET with Aspire, configuring cluster bootstrapping, integrating Akka.Persistence with SQL Server, or deploying actor systems to Kubernetes."
 invocable: false
 ---
 
@@ -524,6 +524,19 @@ public static class AkkaManagementExtensions
   }
 }
 ```
+
+## Implementation Workflow
+
+1. **Create configuration model** - Define `AkkaSettings` with strongly-typed properties for remote, cluster, and management options
+   - Validate: Settings class compiles and binds from `appsettings.json`
+2. **Wire up Akka.Hosting** - Create `AkkaConfiguration.cs` extension methods calling `AddAkka()`, `WithRemoting()`, `WithClustering()`, `WithSqlPersistence()`
+   - Validate: Application starts without configuration errors, health checks return healthy
+3. **Configure Aspire orchestration** - Set up `AppHost/Program.cs` with SQL Server resource, replicas, and Akka.Management environment variables
+   - Validate: Aspire dashboard shows all replicas running, cluster members join successfully
+4. **Add discovery provider** - Configure Azure Table Storage, Kubernetes, or Config-based discovery
+   - Validate: Nodes discover each other and form a single cluster (check `/cluster/members` endpoint)
+5. **Enable health checks** - Add readiness, liveness, and persistence health checks
+   - Validate: `/health/ready` and `/health/live` endpoints return 200
 
 ## Common Patterns
 

@@ -1,22 +1,10 @@
 ---
 name: akka-net-best-practices
-description: Critical Akka.NET best practices including EventStream vs DistributedPubSub, supervision strategies, error handling, Props vs DependencyResolver, work distribution patterns, and cluster/local mode abstractions for testability.
+description: "Critical Akka.NET best practices including EventStream vs DistributedPubSub, supervision strategies, error handling, Props vs DependencyResolver, work distribution patterns, and cluster/local mode abstractions for testability. Use when designing actor communication, choosing supervision strategies, implementing error handling in actors, or creating testable actor systems."
 invocable: false
 ---
 
 # Akka.NET Best Practices
-
-## When to Use This Skill
-
-Use this skill when:
-- Designing actor communication patterns
-- Deciding between EventStream and DistributedPubSub
-- Implementing error handling in actors
-- Understanding supervision strategies
-- Choosing between Props patterns and DependencyResolver
-- Designing work distribution across nodes
-- Creating testable actor systems that can run with or without cluster infrastructure
-- Abstracting over Cluster Sharding for local testing scenarios
 
 ## Reference Files
 

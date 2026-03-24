@@ -1,21 +1,19 @@
 ---
 name: testcontainers-integration-tests
-description: Write integration tests using TestContainers for .NET with xUnit. Covers infrastructure testing with real databases, message queues, and caches in Docker containers instead of mocks.
+description: "Write integration tests using TestContainers for .NET with xUnit. Covers infrastructure testing with real databases, message queues, and caches in Docker containers instead of mocks. Use when writing integration tests against real infrastructure, testing data access layers, verifying message queue behavior, or testing database migrations."
 invocable: false
 ---
 
 # Integration Testing with TestContainers
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Writing integration tests that need real infrastructure (databases, caches, message queues)
-- Testing data access layers against actual databases
-- Verifying message queue integrations
-- Testing Redis caching behavior
-- Avoiding mocks for infrastructure components
-- Ensuring tests work against production-like environments
-- Testing database migrations and schema changes
+1. **Add packages** - Install `Testcontainers` and database-specific NuGet packages (e.g., `Microsoft.Data.SqlClient`, `Npgsql`)
+2. **Create fixture** - Implement `IAsyncLifetime` with container setup in `InitializeAsync` and disposal in `DisposeAsync`
+3. **Configure container** - Use `TestcontainersBuilder` with image, environment variables, random port binding, and wait strategies
+4. **Write tests** - Test against real infrastructure; use `GetMappedPublicPort` for connection strings
+5. **Clean between tests** - Use Respawn for data reset or fresh containers per test class
+6. **Validate in CI** - Ensure CI runner has Docker; add `docker container prune -f` in cleanup step
 
 ## Reference Files
 

@@ -1,20 +1,19 @@
 ---
 name: type-design-performance
-description: Design .NET types for performance. Seal classes, use readonly structs, prefer static pure functions, avoid premature enumeration, and choose the right collection types.
+description: "Design .NET types for performance. Seal classes, use readonly structs, prefer static pure functions, avoid premature enumeration, and choose the right collection types. Use when designing new types and APIs, reviewing code for performance issues, or choosing between class, struct, and record."
 invocable: false
 ---
 
 # Type Design for Performance
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Designing new types and APIs
-- Reviewing code for performance issues
-- Choosing between class, struct, and record
-- Working with collections and enumerables
-
----
+1. **Review type declarations** - Check all classes are sealed unless explicitly designed for inheritance
+2. **Audit structs** - Ensure all value types are `readonly struct` or `readonly record struct`
+3. **Evaluate methods** - Convert stateless instance methods to `static` pure functions
+4. **Check enumeration** - Verify LINQ chains have a single materialization point (one `.ToList()`)
+5. **Validate return types** - Ensure API boundaries return `IReadOnlyList<T>` or `IReadOnlyCollection<T>`
+6. **Verify** - Confirm no anti-patterns remain (mutable structs, unsealed classes, multiple `.ToList()`)
 
 ## Core Principles
 

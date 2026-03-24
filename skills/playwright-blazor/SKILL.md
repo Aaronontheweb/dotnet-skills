@@ -1,21 +1,18 @@
 ---
 name: playwright-blazor-testing
-description: Write UI tests for Blazor applications (Server or WebAssembly) using Playwright. Covers navigation, interaction, authentication, selectors, and common Blazor-specific patterns.
+description: "Write UI tests for Blazor applications (Server or WebAssembly) using Playwright. Covers navigation, interaction, authentication, selectors, and common Blazor-specific patterns. Use when writing end-to-end tests for Blazor apps, testing forms and user workflows, verifying auth flows, or testing SignalR real-time updates."
 invocable: false
 ---
 
 # Testing Blazor Applications with Playwright
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Writing end-to-end UI tests for Blazor Server or WebAssembly applications
-- Testing interactive components, forms, and user workflows
-- Verifying authentication and authorization flows
-- Testing SignalR-based real-time updates in Blazor Server
-- Capturing screenshots for visual regression testing
-- Testing responsive designs and mobile emulation
-- Debugging UI issues with browser developer tools
+1. **Install Playwright** - Add NuGet packages and install browsers with `pwsh -Command "playwright install --with-deps"`
+2. **Set up fixtures** - Create `PlaywrightFixture` with `IAsyncLifetime` for browser lifecycle management
+3. **Write tests** - Use `data-test` attributes for stable selectors; wait for DOM elements (not network idle)
+4. **Handle Blazor specifics** - Check `#blazor-error-ui` after actions; use `WaitForSelectorAsync` for navigation
+5. **Validate** - Run tests headless in CI; capture screenshots on failure for debugging
 
 ## Core Principles
 

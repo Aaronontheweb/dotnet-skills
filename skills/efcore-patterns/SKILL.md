@@ -1,20 +1,20 @@
 ---
 name: efcore-patterns
-description: Entity Framework Core best practices including NoTracking by default, query splitting for navigation collections, migration management, dedicated migration services, and common pitfalls to avoid.
+description: "Entity Framework Core best practices including NoTracking by default, query splitting for navigation collections, migration management, dedicated migration services, and common pitfalls to avoid. Use when setting up EF Core, optimizing query performance, managing migrations, debugging change tracking issues, or integrating EF Core with .NET Aspire."
 invocable: false
 ---
 
 # Entity Framework Core Patterns
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
-- Setting up EF Core in a new project
-- Optimizing query performance
-- Managing database migrations
-- Integrating EF Core with .NET Aspire
-- Debugging change tracking issues
-- Loading multiple navigation collections efficiently (query splitting)
+1. **Configure NoTracking default** - Set `QueryTrackingBehavior.NoTracking` on DbContext constructor
+2. **Set up query splitting** - Enable `SplitQuery` globally via `UseNpgsql` options to prevent Cartesian explosion
+3. **Create migrations via CLI** - Use `dotnet ef migrations add` (never edit migration files manually)
+4. **Set up dedicated migration service** - Separate migration runner from app startup using `BackgroundService`
+5. **Implement retry strategy** - Wrap operations in `CreateExecutionStrategy().ExecuteAsync()` for transient failures
+6. **Use bulk operations** - Replace entity-loading loops with `ExecuteUpdateAsync`/`ExecuteDeleteAsync` (EF Core 7+)
+7. **Validate** - Confirm reads use `.AsNoTracking()`, writes use explicit `.Update()` or `.AsTracking()`
 
 ## Core Principles
 
