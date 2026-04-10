@@ -1,5 +1,21 @@
 # Release Notes
 
+## v1.3.1 (2026-04-10)
+
+### New Skills
+
+- **opentelemetry-dotnet-instrumentation** - Added skill for implementing OpenTelemetry instrumentation in .NET codebases, covering tracing (Activities/Spans), metrics, naming conventions, error handling, performance, and API design best practices. ([#52](https://github.com/Aaronontheweb/dotnet-skills/pull/52))
+
+### Agent Enhancements
+
+- **dotnet-performance-analyst** - Enhanced performance analysis with delegate allocation insights, including guidance on identifying hot-path delegate allocations, closure allocations, method-group allocations, and proactive review strategies. ([#50](https://github.com/Aaronontheweb/dotnet-skills/pull/50))
+
+### Skill Enhancements
+
+- **Progressive disclosure reformatting** - Reformatted 9 oversized skills to use progressive disclosure patterns, splitting large reference documents into focused primary files with supplementary deep-dive files. Affected skills: `akka-best-practices`, `akka-management`, `akka-testing-patterns`, `aspire-integration-testing`, `csharp-coding-standards`, `csharp-concurrency-patterns`, `microsoft-extensions-configuration`, `microsoft-extensions-dependency-injection`, and `testcontainers`. ([#48](https://github.com/Aaronontheweb/dotnet-skills/pull/48))
+
+---
+
 ## v1.3.0 (2026-02-19)
 
 ### New Skills
