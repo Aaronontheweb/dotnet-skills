@@ -114,51 +114,53 @@ public record PaymentMethod
 
 ## Result Type Pattern
 
-For expected errors, use a simple `IResult<T>` type instead of exceptions. Keep it minimal and let callers use `is` pattern matching. Discriminated unions will eventually replace this in C#, so avoid over-investing in functional combinators like `Map`/`Bind`/`Match`.
+For expected errors, use a **domain-specific result type** instead of exceptions. Don't build a generic `Result<T>` — each operation knows what success and failure look like, so let the result type reflect that. Use sealed records with factory methods and enum error codes.
 
 ```csharp
-// Simple Result interface - callers pattern match on Success/Failure
-public interface IResult<T>
-{
-    bool IsSuccess { get; }
-}
-
-public class Success<T> : IResult<T>
-{
-    public T Value { get; }
-    public bool IsSuccess => true;
-
-    public Success(T value) => Value = value;
-}
-
-public class Failure<T> : IResult<T>
-{
-    public OrderError Error { get; }
-    public bool IsSuccess => false;
-
-    public Failure(OrderError error) => Error = error;
-}
-
-// Use enums for error codes - type-safe, space-efficient, and switchable
-public enum OrderError
+// Enum for error classification - type-safe and switchable
+public enum OrderErrorCode
 {
     ValidationError,
     InsufficientInventory,
     NotFound
 }
 
+// Domain-specific result type - sealed record with factory methods
+public sealed record CreateOrderResult
+{
+    public bool IsSuccess { get; private init; }
+    public Order? Order { get; private init; }
+    public OrderErrorCode? ErrorCode { get; private init; }
+    public string? ErrorMessage { get; private init; }
+
+    public static CreateOrderResult Success(Order order) => new()
+    {
+        IsSuccess = true,
+        Order = order
+    };
+
+    public static CreateOrderResult Failed(OrderErrorCode code, string message) => new()
+    {
+        IsSuccess = false,
+        ErrorCode = code,
+        ErrorMessage = message
+    };
+}
+
 // Usage example
 public sealed class OrderService(IOrderRepository repository)
 {
-    public async Task<IResult<Order>> CreateOrderAsync(
+    public async Task<CreateOrderResult> CreateOrderAsync(
         CreateOrderRequest request,
         CancellationToken cancellationToken)
     {
         if (!IsValid(request))
-            return new Failure<Order>(OrderError.ValidationError);
+            return CreateOrderResult.Failed(
+                OrderErrorCode.ValidationError, "Invalid order request");
 
         if (!await HasInventoryAsync(request.Items, cancellationToken))
-            return new Failure<Order>(OrderError.InsufficientInventory);
+            return CreateOrderResult.Failed(
+                OrderErrorCode.InsufficientInventory, "Items out of stock");
 
         var order = new Order(
             OrderId.New(),
@@ -167,22 +169,24 @@ public sealed class OrderService(IOrderRepository repository)
 
         await repository.SaveAsync(order, cancellationToken);
 
-        return new Success<Order>(order);
+        return CreateOrderResult.Success(order);
     }
 
-    // Pattern matching with 'is' - simple, idiomatic C#
-    public IActionResult MapToActionResult(IResult<Order> result)
+    // Map result to HTTP response - switch on enum error codes
+    public IActionResult MapToActionResult(CreateOrderResult result)
     {
-        if (result is Success<Order> success)
-            return new OkObjectResult(success.Value);
+        if (result.IsSuccess)
+            return new OkObjectResult(result.Order);
 
-        var failure = (Failure<Order>)result;
-        return failure.Error switch
+        return result.ErrorCode switch
         {
-            OrderError.ValidationError => new BadRequestResult(),
-            OrderError.InsufficientInventory => new ConflictResult(),
-            OrderError.NotFound => new NotFoundResult(),
-            _ => new StatusCodeResult(500)
+            OrderErrorCode.ValidationError =>
+                new BadRequestObjectResult(new { error = result.ErrorMessage }),
+            OrderErrorCode.InsufficientInventory =>
+                new ConflictObjectResult(new { error = result.ErrorMessage }),
+            OrderErrorCode.NotFound =>
+                new NotFoundObjectResult(new { error = result.ErrorMessage }),
+            _ => new ObjectResult(new { error = result.ErrorMessage }) { StatusCode = 500 }
         };
     }
 }
