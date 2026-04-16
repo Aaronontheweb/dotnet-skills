@@ -1,5 +1,25 @@
 # Release Notes
 
+## v1.3.2 (2026-04-15)
+
+### Skill Enhancements
+
+- **csharp-coding-standards: constraint-enforcing value objects** - Added new section on value objects that enforce domain constraints beyond identifiers, including `AbsoluteUrl` (with Linux `Uri.TryCreate` gotcha), `NonEmptyString`, `EmailAddress`, `PositiveAmount`, and `TypeConverter` support for `IOptions<T>` configuration binding. ([#60](https://github.com/Aaronontheweb/dotnet-skills/pull/60), fixes [#43](https://github.com/Aaronontheweb/dotnet-skills/issues/43))
+
+- **csharp-coding-standards: simplified Result type pattern** - Replaced over-engineered generic `Result<T, TError>` with domain-specific sealed record pattern using `IsSuccess` boolean, factory methods, and enum error codes. Matches real-world C# idioms instead of F#-style railway-oriented programming. ([#58](https://github.com/Aaronontheweb/dotnet-skills/pull/58), fixes [#57](https://github.com/Aaronontheweb/dotnet-skills/issues/57))
+
+### Bug Fixes
+
+- **csharp-api-design: binary compatibility correction** - Fixed incorrect guidance that listed adding optional parameters to existing methods as a safe change. This is binary incompatible — the IL method signature changes and callers compiled against the old signature get `MissingMethodException` at runtime. Corrected to show adding new overload methods instead. ([#59](https://github.com/Aaronontheweb/dotnet-skills/pull/59), fixes [#56](https://github.com/Aaronontheweb/dotnet-skills/issues/56))
+
+### Issues Fixed
+
+- [#43](https://github.com/Aaronontheweb/dotnet-skills/issues/43) - Enhance value object skill: constraint enforcement beyond identifiers
+- [#56](https://github.com/Aaronontheweb/dotnet-skills/issues/56) - C# API design error: adding optional parameters to an existing method is not binary compatible
+- [#57](https://github.com/Aaronontheweb/dotnet-skills/issues/57) - C# coding standards: example result pattern is over-engineered
+
+---
+
 ## v1.3.1 (2026-04-10)
 
 ### New Skills
