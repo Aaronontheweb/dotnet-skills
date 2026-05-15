@@ -175,8 +175,6 @@ public static class Extensions
             {
                 tracing
                     .AddSource(builder.Environment.ApplicationName)
-                    .AddSource("Microsoft.Orleans.Runtime")
-                    .AddSource("Microsoft.Orleans.Application")
                     .AddAspNetCoreInstrumentation(options =>
                         // Exclude health checks from traces
                         options.Filter = context =>
