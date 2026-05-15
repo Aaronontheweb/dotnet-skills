@@ -25,7 +25,7 @@ ServiceDefaults is a shared project that provides common configuration for all s
 - **Service Discovery** - Automatic service resolution
 - **HTTP Resilience** - Retry and circuit breaker policies
 
-Every service references this project and calls `AddServiceDefaults()`.
+Every service references this project and calls `AddServiceDefaults()` or `AddServiceDefaultsWithOrleans()` for Orleans-based services.
 
 ---
 
@@ -37,11 +37,11 @@ src/
     Extensions.cs
     MyApp.ServiceDefaults.csproj
   MyApp.Api/
-    Program.cs  # Calls AddServiceDefaults()
+    Program.cs  # Calls AddServiceDefaults() or AddServiceDefaultsWithOrleans()
   MyApp.Worker/
     Program.cs  # Calls AddServiceDefaults()
   MyApp.AppHost/
-    Program.cs
+    Program.cs  # Does NOT call AddServiceDefaults()
 ```
 
 ---
@@ -53,7 +53,7 @@ src/
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <IsAspireSharedProject>true</IsAspireSharedProject>
   </PropertyGroup>
 
@@ -97,8 +97,45 @@ public static class Extensions
     public static TBuilder AddServiceDefaults<TBuilder>(this TBuilder builder, Action<TracerProviderBuilder>? traceProvider = null)
         where TBuilder : IHostApplicationBuilder
     {
-        builder.ConfigureOpenTelemetry();
-        builder.AddDefaultHealthChecks(traceProvider);
+        builder.ConfigureOpenTelemetry(traceProvider);
+        builder.AddDefaultHealthChecks();
+
+        builder.Services.AddServiceDiscovery();
+
+        builder.Services.ConfigureHttpClientDefaults(http =>
+        {
+            // Resilience: retries, circuit breaker, timeouts
+            http.AddStandardResilienceHandler();
+
+            // Service discovery: resolve service names to addresses
+            http.AddServiceDiscovery();
+        });
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Adds common Aspire services: OpenTelemetry, health checks,
+    /// service discovery, and HTTP resilience with Orleans support.
+    /// Use this for services that interact with Orleans.
+    /// </summary>
+    public static TBuilder AddServiceDefaultsWithOrleans<TBuilder>(this TBuilder builder, Action<TracerProviderBuilder>? traceProvider = null)
+        where TBuilder : IHostApplicationBuilder
+    {
+        Action<TracerProviderBuilder> orleansTracerAction = t =>
+        {
+            t.AddSource("Microsoft.Orleans.Runtime");
+            t.AddSource("Microsoft.Orleans.Application");
+        };
+
+        if (traceProvider == null)
+            traceProvider = orleansTracerAction;
+        else
+            traceProvider += orleansTracerAction;
+
+        builder.ConfigureOpenTelemetry(traceProvider);
+
+        builder.AddDefaultHealthChecks();
 
         builder.Services.AddServiceDiscovery();
 
@@ -206,7 +243,7 @@ public static class Extensions
 
 ## Usage in Services
 
-### API Service
+### API Service (without Orleans)
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -226,34 +263,52 @@ app.MapControllers();
 app.Run();
 ```
 
-### Orleans Client (Only use if your service uses Orleans)
-```csharp
-client.AddActivityPropagation();
-```
-
-### CorrelationIncomingGrainFilter.cs in Orleans (Only use if your service uses Orleans)
+### API Service (with Orleans)
 
 ```csharp
-public class CorrelationIncomingGrainFilter : IIncomingGrainCallFilter
+var builder = WebApplication.CreateBuilder(args);
+
+// Add all service defaults with Orleans support
+builder.AddServiceDefaultsWithOrleans();
+
+// Configure Orleans client
+builder.Services.AddOrleansClient(client =>
 {
-	public Task Invoke(IIcomingGrainCallContext context)
-	{
-		var activity = Activity.Current;
-		if (activity != null)
-		{
-			var correlationId = RequestContext.Get("correlationId")?.ToString();
-			if (!string.IsNullOrEmpty(correlationId))
-				activity.SetTag("correlationId", correlationId);
-		}
-		return context.Invoke();
-	}
-}
+    // Orleans configuration
+    client.AddActivityPropagation(); // Add activity propagation for distributed tracing
+});
+
+// Add your services
+builder.Services.AddControllers();
+
+var app = builder.Build();
+
+// Map health endpoints
+app.MapDefaultEndpoints();
+
+app.MapControllers();
+app.Run();
 ```
 
-This needs to be added in Orleans Server, and registered as:
+### Orleans Silo Service
+
 ```csharp
-siloBuilder.AddIncomingGrainCallFilter<CorrelationIncomingGrainFilter>();
-siloBuilder.AddActivityPropagation();
+var builder = Host.CreateApplicationBuilder(args);
+
+// Add all service defaults with Orleans support
+builder.AddServiceDefaultsWithOrleans();
+
+builder.Services.AddOrleans(siloBuilder =>
+{
+    // Orleans configuration
+    
+    // Add correlation ID tracing support
+    siloBuilder.AddIncomingGrainCallFilter<CorrelationIdIncomingGrainFilter>();
+    siloBuilder.AddActivityPropagation();
+});
+
+var host = builder.Build();
+host.Run();
 ```
 
 ### Worker Service
@@ -270,6 +325,33 @@ var host = builder.Build();
 host.Run();
 ```
 
+---
+## Orleans CorrelationIdIncomingGrainFilter
+
+For services using Orleans, create this filter to support distributed tracing:
+
+```csharp
+using System.Diagnostics;
+using System.Threading.Tasks;
+using Orleans.Runtime;
+
+namespace YourNamespace;
+
+public class CorrelationIdIncomingGrainFilter : IIncomingGrainCallFilter
+{
+    public Task Invoke(IIncomingGrainCallContext context)
+    {
+        var activity = Activity.Current;
+        if (activity != null)
+        {
+            var correlationId = RequestContext.Get("correlationId")?.ToString();
+            if (!string.IsNullOrEmpty(correlationId))
+                activity.SetTag("correlationId", correlationId);
+        }
+        return context.Invoke();
+    }
+}
+```
 ---
 
 ## Adding Custom Health Checks
@@ -371,7 +453,7 @@ public static WebApplication MapDefaultEndpoints(this WebApplication app)
 
 ## Integration with AppHost
 
-The AppHost automatically configures OTLP endpoints:
+The AppHost does NOT need to call service defaults:
 
 ```csharp
 // AppHost/Program.cs
@@ -400,6 +482,7 @@ Services receive `OTEL_EXPORTER_OTLP_ENDPOINT` automatically, sending telemetry 
 | **Tag health checks** | Separate liveness from readiness |
 | **Use StandardResilienceHandler** | Built-in retry, circuit breaker, timeout |
 | **Add custom trace sources** | Capture domain-specific spans |
+| **Use AddServiceDefaultsWithOrleans for Orleans services** | Proper Orleans tracing support |
 
 ---
 
