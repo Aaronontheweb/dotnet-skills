@@ -73,6 +73,7 @@ src/
 ### Extensions.cs
 
 ```csharp
+using System;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,11 +94,11 @@ public static class Extensions
     /// Adds common Aspire services: OpenTelemetry, health checks,
     /// service discovery, and HTTP resilience.
     /// </summary>
-    public static TBuilder AddServiceDefaults<TBuilder>(this TBuilder builder)
+    public static TBuilder AddServiceDefaults<TBuilder>(this TBuilder builder, Action<TracerProviderBuilder>? traceProvider = null)
         where TBuilder : IHostApplicationBuilder
     {
         builder.ConfigureOpenTelemetry();
-        builder.AddDefaultHealthChecks();
+        builder.AddDefaultHealthChecks(traceProvider);
 
         builder.Services.AddServiceDiscovery();
 
@@ -113,7 +114,7 @@ public static class Extensions
         return builder;
     }
 
-    public static TBuilder ConfigureOpenTelemetry<TBuilder>(this TBuilder builder)
+    public static TBuilder ConfigureOpenTelemetry<TBuilder>(this TBuilder builder, Action<TracerProviderBuilder>? traceProvider = null)
         where TBuilder : IHostApplicationBuilder
     {
         // Logging
@@ -137,12 +138,16 @@ public static class Extensions
             {
                 tracing
                     .AddSource(builder.Environment.ApplicationName)
+                    .AddSource("Microsoft.Orleans.Runtime")
+                    .AddSource("Microsoft.Orleans.Application")
                     .AddAspNetCoreInstrumentation(options =>
                         // Exclude health checks from traces
                         options.Filter = context =>
                             !context.Request.Path.StartsWithSegments(HealthEndpointPath) &&
                             !context.Request.Path.StartsWithSegments(AlivenessEndpointPath))
                     .AddHttpClientInstrumentation();
+
+                    traceProvider?.Invoke(tracing);
             });
 
         builder.AddOpenTelemetryExporters();
@@ -219,6 +224,36 @@ app.MapDefaultEndpoints();
 
 app.MapControllers();
 app.Run();
+```
+
+### Orleans Client (Only use if your service uses Orleans)
+```csharp
+client.AddActivityPropagation();
+```
+
+### CorrelationIncomingGrainFilter.cs in Orleans (Only use if your service uses Orleans)
+
+```csharp
+public class CorrelationIncomingGrainFilter : IIncomingGrainCallFilter
+{
+	public Task Invoke(IIcomingGrainCallContext context)
+	{
+		var activity = Activity.Current;
+		if (activity != null)
+		{
+			var correlationId = RequestContext.Get("correlationId")?.ToString();
+			if (!string.IsNullOrEmpty(correlationId))
+				activity.SetTag("correlationId", correlationId);
+		}
+		return context.Invoke();
+	}
+}
+```
+
+This needs to be added in Orleans Server, and registered as:
+```csharp
+siloBuilder.AddIncomingGrainCallFilter<CorrelationIncomingGrainFilter>();
+siloBuilder.AddActivityPropagation();
 ```
 
 ### Worker Service
