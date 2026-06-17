@@ -145,13 +145,42 @@ public sealed partial class FooGenerator
 Rules of thumb:
 
 - Keep collections small and stable.
-- Avoid `List<T>` or arrays unless you also provide an explicit comparer in the pipeline.
-- If your project has an `ImmutableEquatableArray<T>` utility, use it as the default for spec collections.
+- Avoid `List<T>` or arrays **in pipeline-facing models** unless you also provide an explicit comparer in the pipeline; mutable collections are preferred for temporary internal construction.
+- If your project has an `ImmutableEquatableArray<T>` utility, use it as the default for spec collections that cross incremental boundaries.
 
+### Internal construction vs pipeline boundaries
+
+Immutable collections exist so that **pipeline models are equatable by value**. Inside parser or utility code—where you are simply gathering data before returning a spec—mutable collections are faster and allocate less. Convert to the immutable equatable form only at the boundary when constructing the spec that flows into the incremental pipeline.
+
+```csharp
+// Inside the parser: use HashSet<T> or List<T> for temporary work
+var messageTypes = new HashSet<string>(StringComparer.Ordinal);
+foreach (var attribute in symbol.GetAttributes())
+{
+    if (attribute.ConstructorArguments.Length > 0)
+    {
+        messageTypes.Add(attribute.ConstructorArguments[0].Value?.ToString());
+    }
+}
+
+// Boundary: convert to the equatable immutable form for the spec
+return new FooSpec(
+    symbol.Name,
+    symbol.ContainingNamespace.ToDisplayString(),
+    ImmutableEquatableArray.Create(messageTypes));
+```
+
+**Why this matters**: immutable collections and their builders generally carry overhead during construction compared to their mutable counterparts. For example, `ImmutableHashSet.Builder.Add` is roughly 1.4–3× slower than `HashSet.Add`, and `ImmutableArray.Create` from a mutable `List<T>` involves an extra copy step. Since parser work is re-executed whenever a file changes, internal construction should use the cheapest mutable container available; immutability and value equality are only required where the incremental engine caches and compares model snapshots. The benchmark above illustrates the pattern with `HashSet<T>` vs `ImmutableHashSet<T>`, but the same principle applies across other collection types.
+
+| Concern | Internal parser/utility code | Pipeline-facing spec |
+|--------|------------------------------|----------------------|
+| Collection type (examples) | `HashSet<T>`, `List<T>`, `Dictionary<TKey,TValue>` | `ImmutableEquatableArray<T>`, `ImmutableHashSet<T>`, `ImmutableArray<T>` |
+| Equality semantics | Reference or none needed | Deep value equality |
+| Performance priority | Minimize allocation and CPU | Stable comparability for caching |
+
+Apply this same principle to any intermediate lookup or accumulation that does not itself survive as an incremental model: build mutable, freeze immutable at the boundary.
 
 ### Feature folders and shared utilities
-
-For larger generator suites:
 
 - Group feature-specific generators under feature folders (for example `Features/`, `Controllers/`, `Validators/`).
 - Place reusable infrastructure under `Utility/` (source writers, equatable arrays, hashing helpers, location specs).
