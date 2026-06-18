@@ -22,6 +22,7 @@
     "./skills/csharp-concurrency-patterns",
     "./skills/csharp-api-design",
     "./skills/csharp-type-design-performance",
+    "./skills/r3-reactive-extensions",
     "./skills/efcore-patterns",
     "./skills/database-performance",
     "./skills/project-structure",

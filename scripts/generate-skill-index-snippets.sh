@@ -43,7 +43,7 @@ while IFS= read -r skill_dir; do
   name="$(skill_name_from_dir "$skill_dir")"
   case "$skill_dir" in
     ./skills/akka-*) akka+=("$name") ;;
-    ./skills/csharp-*) csharp+=("$name") ;;
+    ./skills/csharp-*|./skills/r3-*) csharp+=("$name") ;;
     ./skills/aspire-*|./skills/mjml-*) aspnetcore_web+=("$name") ;;
     ./skills/efcore-*|./skills/database-*) data+=("$name") ;;
     ./skills/microsoft-extensions-*) di_config+=("$name") ;;
