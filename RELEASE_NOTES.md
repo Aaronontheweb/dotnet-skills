@@ -1,5 +1,22 @@
 # Release Notes
 
+## v1.4.0 (2026-06-18)
+
+### New Skills
+
+- **r3-reactive-extensions** - Added a progressive-disclosure skill for [Cysharp's R3](https://github.com/Cysharp/R3), the modern reimplementation of Reactive Extensions for .NET. Covers the `Observable<T>`/`Observer<T>` model and the `OnErrorResume` error contract (errors don't terminate subscriptions), `TimeProvider`/`FrameProvider` in place of `IScheduler`, and subscription-leak tracking. Sibling reference files cover R3-vs-Rx.NET differences and a 10-step migration checklist (operator renames such as `Throttle`→`Debounce`, `Sample`→`ThrottleLast`, `Buffer`→`Chunk`), async dispatch via the `AwaitOperation` enum with `Task` and `IAsyncEnumerable` integration plus MVVM lifecycle patterns, and the concurrent-update serialization contract with deterministic testing via `FakeTimeProvider`/`FakeFrameProvider`. Every behavioral and API claim was verified against R3 1.3.1 with runnable proofs of concept. ([#67](https://github.com/Aaronontheweb/dotnet-skills/pull/67))
+
+### Agent Enhancements
+
+- **roslyn-incremental-generator-specialist: mutable vs immutable collections** - Added guidance distinguishing internal parser/utility construction from pipeline-facing specs when choosing collections. Mutable collections (`HashSet<T>`, `List<T>`, `Dictionary<TKey,TValue>`) are preferred for temporary work that re-executes on every file change, while immutable equatable forms (`ImmutableEquatableArray<T>`, `ImmutableHashSet<T>`, `ImmutableArray<T>`) are reserved for the incremental-pipeline boundary where the engine caches and compares model snapshots. Includes benchmark-backed rationale (`ImmutableHashSet.Builder.Add` is roughly 1.4–3× slower than `HashSet.Add`) and a token-efficiency pass that trimmed the agent from 511 to 475 lines with no loss of actionable guidance. ([#66](https://github.com/Aaronontheweb/dotnet-skills/pull/66))
+
+### Issues Fixed
+
+- [#67](https://github.com/Aaronontheweb/dotnet-skills/pull/67) - Add R3 reactive extensions skill
+- [#66](https://github.com/Aaronontheweb/dotnet-skills/pull/66) - Roslyn agent: mutable vs immutable collection guidance & token-efficiency pass
+
+---
+
 ## v1.3.2 (2026-04-15)
 
 ### Skill Enhancements
