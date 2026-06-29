@@ -1,32 +1,82 @@
 ---
-name: OpenTelemetry-NET-Instrumentation
-description: Provides guidance for implementing OpenTelemetry instrumentation in .NET codebases, covering tracing (Activities/Spans), metrics, naming conventions, error handling, performance, and API design best practices.
-version: 1.0.0
+name: opentelemetry-net-instrumentation
+description: Provides guidance for implementing OpenTelemetry instrumentation in .NET codebases, covering tracing (Activities/Spans), metrics, logs, naming conventions, error handling, performance, SDK setup, resources, context propagation, and API design best practices.
+version: 2.0.0
 tags:
   - opentelemetry
   - dotnet
   - observability
   - tracing
   - metrics
+  - logs
   - performance
 ---
 
 # OpenTelemetry .NET Instrumentation Skill
 
-## Description
-Provides guidance for implementing OpenTelemetry instrumentation in .NET codebases, covering tracing (Activities/Spans), metrics, naming conventions, error handling, performance, and API design best practices.
-
 ## When to Use
-- Adding OpenTelemetry instrumentation to .NET code
-- Creating or modifying ActivitySources and metrics
-- Reviewing telemetry implementations for compliance
+- Adding OpenTelemetry instrumentation to .NET code (traces, metrics, logs)
+- Creating or modifying ActivitySources, Meters, or ILogger usage
+- Setting up the OpenTelemetry SDK, resources, exporters, or sampling
+- Reviewing telemetry implementations for spec compliance
 - Optimizing instrumentation performance
 - Designing telemetry APIs that become part of the public surface
+- Implementing context propagation across service boundaries
 
-## Prerequisites
-- .NET application with OpenTelemetry SDK
-- Understanding of System.Diagnostics.Metrics and ActivitySource APIs
-- Access to observability backend (e.g., Jaeger, Prometheus, Grafana)
+## Architecture: .NET Is Different
+
+**CRITICAL**: The .NET OpenTelemetry implementation is fundamentally different from other
+platforms. .NET provides tracing, metrics, and logging APIs **in the framework itself**.
+That means **OTel does not provide a separate instrumentation API** — it uses the built-in
+.NET APIs and acts as the collection/export layer.
+
+### The Three Built-in .NET APIs (Primary — Zero Dependencies)
+
+| Signal | .NET Framework API | Namespace |
+|--------|-------------------|-----------|
+| **Tracing** | `ActivitySource` / `Activity` | `System.Diagnostics` |
+| **Metrics** | `Meter` / `Counter<T>` / `Histogram<T>` / etc. | `System.Diagnostics.Metrics` |
+| **Logging** | `ILogger<T>` | `Microsoft.Extensions.Logging` |
+
+These are **the primary and only APIs** library authors should use for instrumentation.
+They ship with the .NET runtime — **no NuGet packages required**.
+
+### The OTel Collection/Export Layer (Secondary — Application Root Only)
+
+OTel NuGet packages are the **collection and export layer**, added only at the application
+composition root (not in libraries):
+
+| Package | Purpose | When to add |
+|---------|---------|-------------|
+| `OpenTelemetry.Extensions.Hosting` | DI integration for ASP.NET Core / generic host | Application only |
+| `OpenTelemetry.Exporter.Console` | Console exporter (dev/testing) | Application only |
+| `OpenTelemetry.Exporter.OpenTelemetryProtocol` | OTLP exporter (production) | Application only |
+| `OpenTelemetry.Exporter.Prometheus*` | Prometheus metrics endpoint | Application only |
+| `OpenTelemetry.Instrumentation.AspNetCore` | Auto-instrument ASP.NET Core requests | Application only |
+| `OpenTelemetry.Instrumentation.Http` | Auto-instrument HttpClient calls | Application only |
+| `OpenTelemetry.Instrumentation.SqlClient` | Auto-instrument SQL calls | Application only |
+
+### Package Decision Guide
+
+**Before adding ANY OpenTelemetry NuGet package, discuss the trade-off with the user:**
+
+> "You're about to add an OTel NuGet package. Is this an application where you need to
+> export telemetry to an observability backend (Jaeger, Prometheus, OTLP collector)?
+> If you're writing a library, you likely need **zero** OTel packages — just use
+> `System.Diagnostics.ActivitySource` / `System.Diagnostics.Metrics.Meter` and let the
+> consuming application configure the export pipeline. Do you want to proceed?"
+
+**Library authors**: Add **nothing**. Use only `System.Diagnostics.*` and `ILogger`.
+The consuming application wires up the SDK and exporters.
+
+**Application authors**: Add `OpenTelemetry.Extensions.Hosting` + the exporters and
+instrumentation libraries you need. See [sdk-resources-and-logs-reference.md](sdk-resources-and-logs-reference.md)
+for full setup patterns.
+
+**Never add** `OpenTelemetry.Api` to a library — `System.Diagnostics.*` IS the API.
+
+For SDK setup, resource configuration, exporters, sampling, and logs integration, see
+[sdk-resources-and-logs-reference.md](sdk-resources-and-logs-reference.md).
 
 ## Core Principles
 
@@ -43,9 +93,10 @@ Provides guidance for implementing OpenTelemetry instrumentation in .NET codebas
 - Exception: High-cardinality metric dimensions may require explicit opt-in
 
 ### Standards Compliance
-- Follow Microsoft best practices for [distributed tracing instrumentation](https://docs.microsoft.com/en-us/dotnet/core/diagnostics/distributed-tracing-instrumentation-walkthroughs)
-- Follow [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/concepts/semantic-conventions/)
-- All attributes must be non-null, non-empty strings
+- Follow Microsoft best practices for [distributed tracing instrumentation](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/distributed-tracing-instrumentation-walkthroughs)
+- Follow [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/specs/semconv/)
+- Attribute values support: **string, boolean, double (IEEE 754), int64, byte arrays, and homogeneous arrays** of these primitive types. Null/empty values are valid and meaningful per the [OTel AnyValue spec](https://opentelemetry.io/docs/specs/otel/common/#anyvalue) — they MUST be stored and passed to exporters.
+- Attribute **keys** must be non-null, non-empty strings
 
 ## Traces / Spans (Activities)
 
@@ -72,51 +123,47 @@ public class MyFeature
 ### Creating Activities
 
 ```csharp
-// ✅ CORRECT: Check HasListeners before creating
+// ✅ Check HasListeners, null-check, then guard expensive work behind IsAllDataRequested
 if (ActivitySource.HasListeners())
 {
     using var activity = ActivitySource.StartActivity("ProcessItem", ActivityKind.Internal);
-
-    if (activity != null)
+    if (activity != null && activity.IsAllDataRequested)
     {
         activity.DisplayName = "Processing order #12345";
-
-        // Only compute expensive tags if requested
-        if (activity.IsAllDataRequested)
-        {
-            activity.SetTag("app.item_id", itemId);
-            activity.SetTag("app.item_type", itemType);
-        }
+        activity.SetTag("app.item_id", itemId);
+        activity.SetTag("app.item_type", itemType);
     }
 }
 
-// ❌ WRONG: Don't start activities in async helper methods (breaks AsyncLocal)
+// ❌ WRONG: Don't start activities in fire-and-forget tasks where the
+// using scope ends before the async work completes (AsyncLocal context is lost)
 async Task HelperAsync()
 {
-    using var activity = ActivitySource.StartActivity("Helper"); // ❌ BAD
-    await DoWorkAsync();
+    using var activity = ActivitySource.StartActivity("Helper");
+    _ = Task.Run(() => DoWorkAsync()); // ❌ activity disposed before task completes
 }
 ```
 
 **Rules**:
 - Check `ActivitySource.HasListeners()` before creating (zero-allocation fast path)
-- Always check if activity is null after creation
-- Never start activities in asynchronous helper methods (`Activity.Current` uses `AsyncLocal`)
-- Use `activity.IsAllDataRequested` before expensive computations
-- Always use W3C ID format (enforce format change if parent uses hierarchical)
+- Always null-check Activity after creation (listeners may not be subscribed)
+- Never start activities in async helper methods (`Activity.Current` uses `AsyncLocal`)
+- Guard expensive tag computation behind `activity.IsAllDataRequested`
+- Always use W3C ID format
 
 ### Activity Naming
 
 ```csharp
-// ✅ CORRECT: Unique operation name, friendly display name
+// ✅ Unique operation name, friendly display name (null-check before accessing)
 using var activity = ActivitySource.StartActivity(
     name: "ProcessItem",              // Unique, identifies class of spans
     kind: ActivityKind.Internal
 );
-activity.DisplayName = "Processing order #12345"; // User-friendly, can be specific
+if (activity != null)
+    activity.DisplayName = "Processing order #12345"; // User-friendly, can be specific
 
 // ❌ WRONG: Don't include runtime data in operation name
-using var activity = ActivitySource.StartActivity($"Process_{itemId}"); // ❌ BAD
+using var badActivity = ActivitySource.StartActivity($"Process_{itemId}"); // ❌
 ```
 
 **Rules**:
@@ -125,38 +172,50 @@ using var activity = ActivitySource.StartActivity($"Process_{itemId}"); // ❌ B
 - Use human-readable `DisplayName` for specifics
 - Follow [OpenTelemetry span naming conventions](https://opentelemetry.io/docs/specs/otel/trace/api/#span)
 
+### SpanKind Selection
+
+Choose the correct `ActivityKind` to clarify the span's role in distributed tracing:
+
+| `ActivityKind` | OTel SpanKind | When to use |
+|----------------|---------------|-------------|
+| `Internal` | `INTERNAL` | Default — in-process operations not crossing a remote boundary |
+| `Server` | `SERVER` | Processing an incoming request (HTTP server, gRPC server, message consumer) |
+| `Client` | `CLIENT` | Making an outgoing request (HTTP client, database client, RPC call) |
+| `Producer` | `PRODUCER` | Sending a deferred/asynchronous message (message queue publish, job enqueue) |
+| `Consumer` | `CONSUMER` | Receiving a deferred/asynchronous message (message queue consume, job dequeue) |
+
+**Rules**:
+- A single span SHOULD NOT serve more than one purpose
+- Create a new span before injecting `SpanContext` for a remote outgoing call
+- See [traces-and-propagation-reference.md](traces-and-propagation-reference.md) for detailed SpanKind guidance with examples
+
 ### Span Attributes (Tags)
 
 ```csharp
-// ✅ CORRECT: Namespace, lowercase, underscore-delimited
+// ✅ Namespace prefix, lowercase, underscore-delimited
 activity?.SetTag("myapp.order_id", orderId);
-activity?.SetTag("myapp.order_type", orderType);
 activity?.SetTag("myapp.db.table_name", tableName);
-
-// Standard semantic conventions where applicable
+// Use standard semantic conventions where applicable
 activity?.SetTag("db.system", "postgresql");
-activity?.SetTag("http.method", "GET");
+activity?.SetTag("http.request.method", "GET");
+// Values can be strings, numbers, booleans, or homogeneous arrays
+activity?.SetTag("app.item_count", 42);
+activity?.SetTag("app.related_ids", new int[] { 1, 2, 3 });
 
-// ❌ WRONG: Various naming violations
-activity?.SetTag("MyApp.OrderId", orderId);         // ❌ Wrong case
-activity?.SetTag("myapp.order-id", orderId);        // ❌ Wrong delimiter
-activity?.SetTag("myapp.orders", count);            // ❌ Plural
-activity?.SetTag("unrelated.ip_address", ip);       // ❌ Not characteristic
+// ❌ WRONG: PascalCase, hyphen delimiter, plural, or unrelated namespace
+activity?.SetTag("MyApp.OrderId", orderId);     // ❌ Wrong case
+activity?.SetTag("myapp.order-id", orderId);    // ❌ Wrong delimiter
 ```
 
-**Naming Conventions**:
-- Use a namespace prefix matching your component: `myapp.*`, `myapp.db.*`
-- All lowercase letters
-- Underscore (`_`) delimiters for multi-word attributes
-- Singular form
-- Only set tags directly relevant to this activity
-- Prefer standard [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/specs/semconv/) over custom attributes where they exist
-- Only use standard semantic conventions if certain no downstream library will set them
+**Rules**:
+- Namespace prefix matching your component: `myapp.*`, `myapp.db.*`
+- All lowercase, underscore (`_`) delimiters, singular form
+- Attribute values: string, boolean, double, int64, byte arrays, homogeneous arrays (null/empty valid per [AnyValue spec](https://opentelemetry.io/docs/specs/otel/common/#anyvalue))
+- Prefer [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) over custom; only set if no downstream library will
 
 ### Activity Status and Errors
 
 ```csharp
-// ✅ CORRECT: Set status and record exceptions
 try
 {
     await ProcessItemAsync();
@@ -166,182 +225,151 @@ catch (Exception ex)
 {
     if (activity != null)
     {
-        activity.SetStatus(ActivityStatusCode.Error);
-        activity.SetTag("otel.status_code", "error");
-        activity.SetTag("otel.status_description", ex.Message);
-
-        // Record exception event per OTel spec
-        activity.AddEvent(new ActivityEvent(
-            "exception",
-            tags: new ActivityTagsCollection
-            {
-                ["exception.type"] = ex.GetType().FullName,
-                ["exception.message"] = ex.Message,
-                ["exception.stacktrace"] = ex.ToString()
-            }
-        ));
+        activity.SetStatus(ActivityStatusCode.Error, ex.Message); // modern API
+        activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
+        {
+            ["exception.type"] = ex.GetType().FullName,
+            ["exception.message"] = ex.Message,
+            ["exception.stacktrace"] = ex.ToString()
+        }));
     }
     throw;
 }
 ```
 
 **Rules**:
-- Set `ActivityStatusCode.Ok` on success
-- Set `ActivityStatusCode.Error` on exception
-- Always add `otel.status_code` and `otel.status_description` tags
-- Record exception events following [OTel exception conventions](https://opentelemetry.io/docs/reference/specification/trace/semantic_conventions/exceptions/)
+- Set `ActivityStatusCode.Ok` on success, `ActivityStatusCode.Error` on exception
+- Use `SetStatus` (the SDK translates it to OTel span status) — legacy `otel.status_code`/`otel.status_description` tags are no longer needed
+- Record exception events per [OTel conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions_attributes/)
 
 ### Activity Events
 
 ```csharp
-// ✅ CORRECT: Use events for additional context (sparingly)
+// ✅ Use events for additional context (sparingly — stored in-memory until export)
 activity?.AddEvent(new ActivityEvent("ItemRetried", tags: new ActivityTagsCollection
 {
-    ["retry_attempt"] = retryCount,
-    ["next_retry_delay"] = delayMs
+    ["retry_attempt"] = retryCount
 }));
 
-// ❌ WRONG: Don't use events for verbose logging
-activity?.AddEvent(new ActivityEvent($"Step {i} completed")); // ❌ Use logging instead
+// ❌ Don't use events for verbose logging — use ILogger instead
 ```
-
-**Rules**:
-- Events stored in-memory until transmission (use sparingly)
-- Only for additional context; consider nested spans for multiple events
-- Use logging for verbose information
 
 ### Accessing Activities
 
 ```csharp
-// ❌ WRONG: Don't rely on Activity.Current when you need a specific span
-public async Task HandleAsync(Context context)
-{
-    var activity = Activity.Current; // ❌ Might be a user-created span, not yours
-    activity?.SetTag("custom", "value");
-}
+// ❌ WRONG: Activity.Current might be a user-created span, not yours
+var activity = Activity.Current;
 
-// ✅ CORRECT: Pass Activity explicitly or store it in a dedicated context object
-public async Task HandleAsync(Context context)
-{
-    if (context.TryGetActivity(out var activity))
-    {
-        activity?.SetTag("custom", "value");
-    }
-}
+// ✅ CORRECT: Pass Activity explicitly or via a dedicated context object
+if (context.TryGetActivity(out var activity)) { activity?.SetTag("custom", "value"); }
 ```
+
+### Span Links
+
+Links connect a span to other spans that are causally related but not in a direct
+parent-child relationship — batch processing, scatter/gather, trace boundary crossings.
+
+```csharp
+var links = new List<ActivityLink>
+{
+    new(activityContext1),
+    new(activityContext2),
+};
+
+var activity = ActivitySource.StartActivity(
+    ActivityKind.Internal, name: "batch-process", links: links);
+```
+
+See [traces-and-propagation-reference.md](traces-and-propagation-reference.md) for full
+link patterns including batch processing, scatter/gather, and trace boundary crossing.
+
+### Context Propagation
+
+Distributed tracing requires propagating trace context across process boundaries
+(HTTP calls, message queues, etc.) using W3C `traceparent` headers. In .NET this is
+handled by `DistributedContextPropagator`. The OTel SDK configures W3C TraceContext
+propagation by default.
+
+See [traces-and-propagation-reference.md](traces-and-propagation-reference.md) for
+propagation patterns, custom propagators, and manual inject/extract for non-standard transports.
 
 ## Metrics
 
 ### Meter and Metrics Class Setup
 
 ```csharp
-// ✅ CORRECT: Group metrics by feature/component
 public sealed class OrderProcessingMetrics : IDisposable
 {
-    private readonly Meter meter;
-    private readonly Histogram<double> processingDuration;
-    private readonly Counter<long> itemsProcessed;
-
-    public OrderProcessingMetrics()
-    {
-        meter = new Meter("MyApp.OrderProcessing", "1.0.0");
-
-        // Singular names, appropriate units, nested hierarchy
-        processingDuration = meter.CreateHistogram<double>(
-            "myapp.order.processing.duration",
-            unit: "s",
-            description: "Duration of order processing"
-        );
-
-        itemsProcessed = meter.CreateCounter<long>(
-            "myapp.order.processing.count",
-            unit: "{order}",
-            description: "Number of orders processed"
-        );
-    }
+    private readonly Meter meter = new("MyApp.OrderProcessing", "1.0.0");
+    private readonly Histogram<double> processingDuration =
+        meter.CreateHistogram<double>("myapp.order.processing.duration", unit: "s");
+    private readonly Counter<long> itemsProcessed =
+        meter.CreateCounter<long>("myapp.order.processing.count", unit: "{order}");
 
     public void Dispose() => meter.Dispose();
 }
 ```
 
 **Naming Conventions** (follow [OTel semantic conventions](https://opentelemetry.io/docs/specs/semconv/general/metrics/)):
-- Singular names (use `_count` suffix instead of pluralization)
-- Nested hierarchy: `myapp.order.processing.duration`
-- Define units (s, ms, {item}, {connection})
-- Avoid technical suffixes (`_counter`, `_histogram`)
+- Singular names, nested hierarchy: `myapp.order.processing.duration`
+- Define units (s, ms, {item}, {connection}); avoid technical suffixes (`_counter`, `_histogram`)
 - Start with pre-1.0.0 version until adoption proven
+
+### Instrument Type Overview
+
+.NET provides 7 metric instrument types. Choose the right one for your measurement:
+
+| Instrument | .NET API | Behavior | Typical Use |
+|------------|---------|----------|-------------|
+| **Counter** | `CreateCounter<T>` | Monotonically increasing | Request counts, error counts |
+| **UpDownCounter** | `CreateUpDownCounter<T>` | Increases or decreases | Queue size, active connections |
+| **Histogram** | `CreateHistogram<T>` | Distribution of values | Durations, response sizes |
+| **Gauge** | `CreateGauge<T>` (.NET 9+) | Synchronous instant value | Current measurement recording |
+| **ObservableCounter** | `CreateObservableCounter<T>` | Async callback, monotonic | Periodically polled totals |
+| **ObservableGauge** | `CreateObservableGauge<T>` | Async callback, non-monotonic | CPU/memory usage |
+| **ObservableUpDownCounter** | `CreateObservableUpDownCounter<T>` | Async callback, bi-directional | Active tasks by priority |
+
+See [metrics-and-instruments-reference.md](metrics-and-instruments-reference.md) for
+full creation and recording examples for every instrument type, including callback
+patterns for observable instruments.
 
 ### Metric Recording Method Naming
 
 ```csharp
-// ✅ CORRECT: Action/outcome-based naming, separate methods per outcome
-public sealed class OrderProcessingMetrics
-{
-    // Event happened: describe what occurred
-    public void OrderProcessingSucceeded(string orderType, TimeSpan duration)
-    {
-        processingDuration.Record(duration.TotalSeconds,
-            new KeyValuePair<string, object?>("myapp.order_type", orderType),
-            new KeyValuePair<string, object?>("outcome", "success")
-        );
-    }
+// ✅ Action/outcome-based naming, separate methods per outcome
+public void OrderProcessingSucceeded(string orderType, TimeSpan duration) { /* Record */ }
+public void OrderProcessingFailed(string orderType, Exception ex, TimeSpan duration) { /* Record */ }
+public void ConnectionOpened() => connectionsOpen.Add(1);
+public void ConnectionClosed() => connectionsOpen.Add(-1);
 
-    public void OrderProcessingFailed(string orderType, Exception exception, TimeSpan duration)
-    {
-        processingDuration.Record(duration.TotalSeconds,
-            new KeyValuePair<string, object?>("myapp.order_type", orderType),
-            new KeyValuePair<string, object?>("outcome", "failure"),
-            new KeyValuePair<string, object?>("exception.type", exception.GetType().Name)
-        );
-    }
-
-    public void ConnectionOpened() => connectionsOpen.Add(1);
-    public void ConnectionClosed() => connectionsOpen.Add(-1);
-}
-
-// ❌ WRONG: Various naming anti-patterns
-public void RecordOrderProcessingDuration(...) { } // ❌ Don't name after metric
-public void RecordError(bool succeeded, Exception? ex) { } // ❌ Confusing signature
+// ❌ WRONG: Name after metric, confusing signature
+public void RecordOrderProcessingDuration(...) { } // ❌ don't name after metric
+public void RecordError(bool succeeded, Exception? ex) { } // ❌ confusing signature
 ```
 
-**Rules** (inspired by ASP.NET Core patterns):
-- Name after action/outcome: `OrderProcessingSucceeded`, `RetryAttempted`, `ConnectionFailed`
-- NOT after metric name: avoid `RecordXxx`, `IncrementXxx`
-- Separate methods for different outcomes (avoid boolean flags + optional exceptions)
+**Rules**:
+- Name after action/outcome (`OrderProcessingSucceeded`), NOT after metric (`RecordXxx`)
+- Separate methods per outcome (avoid boolean flags + optional exceptions)
 - Event-based naming for state changes: `ConnectionOpened()`, `ItemQueued()`
 
 ### Metric Dimensions
 
 ```csharp
-// ✅ CORRECT: Low-cardinality, predefined dimensions
-public void OrderProcessingSucceeded(string orderType, TimeSpan duration)
-{
-    processingDuration.Record(duration.TotalSeconds,
-        new KeyValuePair<string, object?>("myapp.order_type", orderType),
-        new KeyValuePair<string, object?>("myapp.region", region),
-        new KeyValuePair<string, object?>("outcome", "success")
-    );
-}
+// ✅ Low-cardinality, predefined dimensions
+processingDuration.Record(duration.TotalSeconds,
+    new KeyValuePair<string, object?>("myapp.order_type", orderType),  // bounded set
+    new KeyValuePair<string, object?>("outcome", "success"));         // bounded set
 
-// ❌ WRONG: High-cardinality dimensions (unbounded values cause cardinality explosion)
-public void OrderFailed(string orderId, string exceptionMessage)
-{
-    failureCount.Add(1,
-        new KeyValuePair<string, object?>("order_id", orderId),               // ❌ Unbounded
-        new KeyValuePair<string, object?>("exception_message", exceptionMessage) // ❌ Unbounded
-    );
-}
+// ❌ High-cardinality: unbounded values cause cardinality explosion
+failureCount.Add(1, new KeyValuePair<string, object?>("order_id", orderId)); // ❌ unbounded
 ```
 
 **Rules**:
-- Dimensions MUST be predefined at instrument creation
-- Avoid dynamic/unbounded values (causes cardinality explosion: each unique value creates a new time series row)
+- Dimensions MUST be predefined and low-cardinality (item type, queue name, outcome)
+- Avoid unbounded values (each unique value = new time series row → cardinality explosion)
 - High-cardinality dimensions MUST be opt-in configuration
-- Use low-cardinality identifiers: item type, queue name, outcome
-- Consistent dimension names across components: `myapp.region` means same thing everywhere
-- Avoid sensitive data
-- Consider [metric enrichment alternatives](https://github.com/open-telemetry/opentelemetry-dotnet/tree/main/docs/metrics#metrics-enrichment)
-- Users can enable [metric exemplars](https://github.com/open-telemetry/opentelemetry-dotnet/tree/main/docs/metrics#metrics-correlation) for correlation (not through dimensions)
+- Consistent names across components: `myapp.region` means the same everywhere
+- Users can enable [exemplars](https://opentelemetry.io/docs/languages/dotnet/metrics/exemplars/) for trace correlation (not via dimensions)
 
 ## Performance Requirements
 
@@ -369,55 +397,29 @@ counter.Add(1, tags);
 ### Timing
 
 ```csharp
-// ✅ CORRECT: Timestamp math (no allocation)
+// ✅ Timestamp math (no allocation)
 var startTime = Stopwatch.GetTimestamp();
-try
-{
-    await ProcessAsync();
-}
-finally
-{
-    var duration = Stopwatch.GetElapsedTime(startTime);
-    metrics.OrderProcessingSucceeded(orderType, duration);
-}
+try { await ProcessAsync(); }
+finally { var duration = Stopwatch.GetElapsedTime(startTime); metrics.OrderProcessingSucceeded(orderType, duration); }
 
-// ❌ WRONG: Allocates Stopwatch object
-var stopwatch = Stopwatch.StartNew(); // ❌ Allocates
-
-// ❌ WRONG: IDisposable timing class (allocates per use)
-using (new MetricScope(metrics, "ProcessOrder")) // ❌ BAD
-{
-    ProcessOrder();
-}
+// ❌ Allocates: Stopwatch.StartNew() or IDisposable timing wrappers
 ```
 
 ### Avoid Hidden Allocations
 
 ```csharp
-// ❌ WRONG: String interpolation allocates
-activity?.SetTag("item", $"Processing {itemId}"); // ❌ Allocates
+// ❌ Allocates: string interpolation without IsAllDataRequested guard
+activity?.SetTag("item", $"Processing {itemId}"); // ❌
 
-// ✅ CORRECT: Check IsAllDataRequested first
+// ✅ Guard expensive work behind IsAllDataRequested
 if (activity?.IsAllDataRequested == true)
-{
     activity.SetTag("item", $"Processing {itemId}");
-}
-
-// ❌ WRONG: LINQ allocates enumerators
-activity?.SetTag("handlers", handlers.Select(h => h.Name).ToArray()); // ❌ Bad
-
-// ✅ CORRECT: Manual construction or check first
-if (activity?.IsAllDataRequested == true)
-{
-    activity.SetTag("handlers", string.Join(",", handlers.Select(h => h.Name)));
-}
 ```
 
 **Rules**:
-- No `Stopwatch.StartNew()` (use timestamp math)
-- No timing `IDisposable` wrappers as classes
+- No `Stopwatch.StartNew()` (use `Stopwatch.GetTimestamp()`/`GetElapsedTime`)
 - Prefer `TagList` (struct) over arrays/dictionaries
-- No hidden work: avoid LINQ, string interpolation, async state machines in hot paths
+- No LINQ, string interpolation, or async state machines in hot paths without guards
 
 ## Testing Requirements
 
@@ -464,14 +466,34 @@ private static readonly ActivitySource ActivitySource = new("MyApp.MyComponent",
 private readonly Meter meter = new("MyApp.MyComponent", "0.8.0");
 ```
 
+## Logs
+
+.NET logs integrate with OpenTelemetry through the built-in `ILogger` API. The OTel
+SDK provides `AddOpenTelemetry()` on the logging builder to collect, process, and export
+logs. Log records are automatically correlated with traces via `TraceId`/`SpanId`.
+
+See [sdk-resources-and-logs-reference.md](sdk-resources-and-logs-reference.md) for
+full logs integration patterns including correlation, redaction, structured logging,
+and severity filtering.
+
+## Reference Files
+
+- [traces-and-propagation-reference.md](traces-and-propagation-reference.md): SpanKind deep dive with examples, Span Links (batch, scatter/gather, trace boundary), Context Propagation (W3C traceparent, DistributedContextPropagator, custom propagators), Baggage, and the full modern exception recording pattern.
+- [metrics-and-instruments-reference.md](metrics-and-instruments-reference.md): All 7 metric instrument types with creation/recording code and when-to-use guidance, observable instrument callback patterns, dimensions deep dive, exemplars, aggregation defaults, and units.
+- [sdk-resources-and-logs-reference.md](sdk-resources-and-logs-reference.md): SDK initialization (ASP.NET Core + Console), Resource configuration (ResourceBuilder, AddService, AddDetector, custom detectors), Exporters (OTLP, Console, Jaeger, Zipkin, Prometheus), Instrumentation Libraries, Sampling (built-in, custom, env vars, head/tail-based), Logs integration (ILogger, correlation, redaction, structured logging), and environment variable configuration.
+
 ## References
 
-- [OpenTelemetry .NET Trace Documentation](https://github.com/open-telemetry/opentelemetry-dotnet/tree/main/docs/trace)
-- [OpenTelemetry .NET Metrics Documentation](https://github.com/open-telemetry/opentelemetry-dotnet/tree/main/docs/metrics)
-- [OpenTelemetry Semantic Conventions](https://opentelemetry.io/docs/concepts/semantic-conventions/)
-- [Microsoft Distributed Tracing Instrumentation](https://docs.microsoft.com/en-us/dotnet/core/diagnostics/distributed-tracing-instrumentation-walkthroughs)
-- [ASP.NET Core Metrics Examples](https://github.com/search?q=repo%3Adotnet%2Faspnetcore+Metrics&type=code)
-- [OpenTelemetry Trace API Span Definition](https://opentelemetry.io/docs/specs/otel/trace/api/#span)
-- [OpenTelemetry Exception Conventions](https://opentelemetry.io/docs/reference/specification/trace/semantic_conventions/exceptions/)
-- [OpenTelemetry Attribute Specification](https://github.com/open-telemetry/opentelemetry-specification/tree/main/specification/common#attribute)
-- [OpenTelemetry Cardinality Limits](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/docs/metrics/README.md#cardinality-limits)
+- [OTel Specification Overview](https://opentelemetry.io/docs/specs/otel/overview/)
+- [OTel Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/)
+- [OTel Common Spec (AnyValue)](https://opentelemetry.io/docs/specs/otel/common/)
+- [OTel Tracing SDK Spec](https://opentelemetry.io/docs/specs/otel/trace/sdk/)
+- [OTel Metrics SDK Spec](https://opentelemetry.io/docs/specs/otel/metrics/sdk/)
+- [OTel Logs Spec](https://opentelemetry.io/docs/specs/otel/logs/)
+- [OTel Resource Spec](https://opentelemetry.io/docs/specs/otel/resource/)
+- [OTel Context Spec](https://opentelemetry.io/docs/specs/otel/context/)
+- [.NET Observability with OpenTelemetry (MS Learn)](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/observability-with-otel)
+- [OTel .NET Manual Instrumentation](https://opentelemetry.io/docs/languages/dotnet/instrumentation/)
+- [OTel .NET Metric Instruments](https://opentelemetry.io/docs/languages/dotnet/metrics/instruments/)
+- [OTel .NET Sampling](https://opentelemetry.io/docs/languages/dotnet/sampling/)
+- [OTel .NET Zero-Code Instrumentation](https://opentelemetry.io/docs/zero-code/net/)
