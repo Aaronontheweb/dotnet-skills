@@ -83,9 +83,11 @@ HTTP client call, database query, RPC invocation.
 spans for outgoing HTTP calls. Only create your own `Client` span for custom
 transports not covered by built-in instrumentation.
 
-**Guideline**: create the `Client` span **before** injecting the `SpanContext`
-into the outgoing request headers. This ensures the context propagation carries
-the correct trace parent.
+**Guideline**: create the `Client` span **before** injecting its `SpanContext`
+into the outgoing request headers. If you inject first, `Activity.Current` still
+points to the parent span, so the parent's context propagates instead of the
+`Client` span's context. The `Client` span then ends up dangling — it exists in
+the trace but has no connection to the downstream call.
 
 ### Producer
 

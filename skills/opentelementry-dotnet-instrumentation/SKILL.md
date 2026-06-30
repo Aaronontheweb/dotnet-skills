@@ -185,7 +185,7 @@ Choose the correct `ActivityKind` to clarify the span's role in distributed trac
 
 **Rules**:
 - A single span SHOULD NOT serve more than one purpose
-- Create a new span before injecting `SpanContext` for a remote outgoing call
+- Create the outgoing span **before** injecting its `SpanContext` into the request. If you inject first, the parent's context propagates instead and the outgoing span ends up dangling (no connection to the downstream call).
 - See [traces-and-propagation-reference.md](traces-and-propagation-reference.md) for detailed SpanKind guidance with examples
 
 ### Span Attributes (Tags)
