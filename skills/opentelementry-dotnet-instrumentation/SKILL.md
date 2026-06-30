@@ -82,8 +82,7 @@ For SDK setup, resource configuration, exporters, sampling, and logs integration
 
 ### Resiliency First
 **CRITICAL**: Exceptions in diagnostic/tracing/metrics logic MUST NEVER impact application processing.
-- Always protect against null Activity references except in Activity extension methods (use `activity?.ExtensionMethod()`)
-- Assume Activity instances can be null (only created when listeners subscribe)
+- Assume Activity instances can be null. Always protect against null Activity references except in Activity extension methods (use `activity?.ExtensionMethod()`)
 - Guard all instrumentation code with appropriate null checks
 
 ### API Surface Awareness
@@ -118,7 +117,7 @@ public class MyFeature
 - Every component defines a primary `ActivitySource` for mainstream activities
 - Name typically matches the component or NuGet package (e.g., `"MyCompany.MyLibrary"`)
 - Version the ActivitySource using SemVer
-- Create separate ActivitySources for specialized/opt-in scenarios
+- Create separate ActivitySources for specialized/opt-in scenarios (use activity namespace hierarchies to allow users to filter out information)
 
 ### Creating Activities
 
