@@ -178,10 +178,10 @@ Choose the correct `ActivityKind` to clarify the span's role in distributed trac
 | `ActivityKind` | OTel SpanKind | When to use |
 |----------------|---------------|-------------|
 | `Internal` | `INTERNAL` | Default — in-process operations not crossing a remote boundary |
-| `Server` | `SERVER` | Processing an incoming request (HTTP server, gRPC server, message consumer) |
-| `Client` | `CLIENT` | Making an outgoing request (HTTP client, database client, RPC call) |
-| `Producer` | `PRODUCER` | Sending a deferred/asynchronous message (message queue publish, job enqueue) |
-| `Consumer` | `CONSUMER` | Receiving a deferred/asynchronous message (message queue consume, job dequeue) |
+| `Server` | `SERVER` | Processing an incoming request/response call (HTTP server, gRPC server, RPC server) |
+| `Client` | `CLIENT` | Making an outgoing request/response call (HTTP client, database client, RPC call) |
+| `Producer` | `PRODUCER` | Enqueuing/publishing deferred work (message queue publish, event emit, job enqueue) |
+| `Consumer` | `CONSUMER` | Dequeuing/processing deferred work (message queue receive, event handle, job dequeue) |
 
 **Rules**:
 - A single span SHOULD NOT serve more than one purpose

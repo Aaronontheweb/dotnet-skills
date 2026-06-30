@@ -57,8 +57,8 @@ activity?.SetTag("server.address", "myapp.example.com");
 activity?.SetTag("server.port", 8080);
 ```
 
-**Use when**: your code is the server side of a client/server interaction —
-HTTP handler, gRPC service, message queue consumer that acknowledges receipt.
+**Use when**: your code is the server side of a request/response interaction —
+HTTP handler, gRPC service, RPC server, or custom protocol handler that sends a response.
 
 **Key**: the OTel SDK's ASP.NET Core instrumentation automatically creates `Server`
 spans for incoming HTTP requests. Only create your own `Server` span if you have a
@@ -99,12 +99,12 @@ activity?.SetTag("messaging.destination.name", "order.events");
 activity?.SetTag("messaging.operation.name", "publish");
 ```
 
-**Use when**: your code sends a message that will be processed asynchronously
-later — message queue publish, event bus emit, job enqueue.
+**Use when**: your code enqueues or publishes deferred work that will be processed
+asynchronously later — message queue publish, event bus emit, job enqueue.
 
 The key difference from `Client`: a `Client` span expects a response (request/response),
-while a `Producer` span fires-and-forgets (deferred execution). The context is
-propagated so the downstream `Consumer` span can link back.
+while a `Producer` span represents handing work to another component for later processing.
+The context is propagated so the downstream `Consumer` span can link back.
 
 ### Consumer
 
@@ -118,8 +118,9 @@ activity?.SetTag("messaging.destination.name", "order.events");
 activity?.SetTag("messaging.operation.name", "receive");
 ```
 
-**Use when**: your code receives a message that was previously produced by a
-`Producer` span — message queue consume, background job processing, event handler.
+**Use when**: your code dequeues, receives, or processes deferred work that was
+previously produced by a `Producer` span — message queue consume, background job
+processing, event handler, job dequeue.
 
 The `Consumer` span's parent is typically the `Producer` span (propagated via context),
 creating a causal link across the asynchronous boundary.
