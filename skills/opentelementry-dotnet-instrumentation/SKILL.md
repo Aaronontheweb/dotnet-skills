@@ -191,12 +191,15 @@ Choose the correct `ActivityKind` to clarify the span's role in distributed trac
 ### Span Attributes (Tags)
 
 ```csharp
-// ✅ Namespace prefix, lowercase, underscore-delimited
+// ✅ Application code: use your own namespace
 activity?.SetTag("myapp.order_id", orderId);
-activity?.SetTag("myapp.db.table_name", tableName);
-// Use standard semantic conventions where applicable
-activity?.SetTag("db.system", "postgresql");
-activity?.SetTag("http.request.method", "GET");
+activity?.SetTag("myapp.payment.status", "confirmed");
+
+// ✅ Infrastructure/library code: use semantic conventions
+// (e.g., custom database client, custom transport, custom messaging library)
+// activity?.SetTag("db.system", "postgresql");
+// activity?.SetTag("http.request.method", "GET");
+
 // Values can be strings, numbers, booleans, or homogeneous arrays
 activity?.SetTag("app.item_count", 42);
 activity?.SetTag("app.related_ids", new int[] { 1, 2, 3 });
@@ -210,7 +213,8 @@ activity?.SetTag("myapp.order-id", orderId);    // ❌ Wrong delimiter
 - Namespace prefix matching your component: `myapp.*`, `myapp.db.*`
 - All lowercase, underscore (`_`) delimiters, singular form
 - Attribute values: string, boolean, double, int64, byte arrays, homogeneous arrays (null/empty valid per [AnyValue spec](https://opentelemetry.io/docs/specs/otel/common/#anyvalue))
-- Prefer [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) over custom; only set if no downstream library will
+- **Application code**: use your own namespace (`myapp.*`). Do not set infrastructure-level conventions (`db.system`, `http.request.method`, `messaging.*`) — those are already handled by the OTel instrumentation libraries.
+- **Library/infrastructure code**: use [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) when implementing the concept the convention describes (e.g., a custom database client sets `db.system`). Do not use OTel namespaces as a prefix for custom attributes.
 
 ### Activity Status and Errors
 
