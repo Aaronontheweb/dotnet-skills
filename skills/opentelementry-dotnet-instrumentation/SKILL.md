@@ -148,7 +148,7 @@ async Task HelperAsync()
 - Always null-check Activity after creation (listener may filter or sample it out)
 - Never start activities in async helper methods (`Activity.Current` uses `AsyncLocal`)
 - Guard expensive tag computation behind `activity.IsAllDataRequested`
-- Always use W3C ID format
+- Always use W3C ID format (default in .NET Core 3.0+ / .NET 5+; on .NET Framework, set `Activity.DefaultIdFormat = ActivityIdFormat.W3C` and `Activity.ForceDefaultIdFormat = true` if the parent uses Hierarchical)
 
 ### Activity Naming
 
