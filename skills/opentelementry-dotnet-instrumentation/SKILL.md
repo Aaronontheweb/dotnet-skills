@@ -145,7 +145,7 @@ async Task HelperAsync()
 
 **Rules**:
 - Check `ActivitySource.HasListeners()` before creating (zero-allocation fast path)
-- Always null-check Activity after creation (listeners may not be subscribed)
+- Always null-check Activity after creation (listener may filter or sample it out)
 - Never start activities in async helper methods (`Activity.Current` uses `AsyncLocal`)
 - Guard expensive tag computation behind `activity.IsAllDataRequested`
 - Always use W3C ID format
