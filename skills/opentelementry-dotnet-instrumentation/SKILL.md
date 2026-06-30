@@ -117,7 +117,7 @@ public class MyFeature
 - Every component defines a primary `ActivitySource` for mainstream activities
 - Name typically matches the component or NuGet package (e.g., `"MyCompany.MyLibrary"`)
 - Version the ActivitySource using SemVer
-- Create separate ActivitySources for specialized/opt-in scenarios (use activity namespace hierarchies to allow users to filter out information)
+- Create separate `ActivitySource`s for specialized or opt-in scenarios. Use hierarchical source names, e.g. `MyCompany.MyLibrary` and `MyCompany.MyLibrary.Detailed`, so consuming applications can subscribe only to the sources they want via `AddSource(...)` and backends can filter by instrumentation scope.
 
 ### Creating Activities
 
