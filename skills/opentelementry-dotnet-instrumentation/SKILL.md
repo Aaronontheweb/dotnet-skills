@@ -233,7 +233,11 @@ catch (Exception ex)
         {
             ["exception.type"] = ex.GetType().FullName,
             ["exception.message"] = ex.Message,
-            ["exception.stacktrace"] = ex.ToString()
+            // exception.stacktrace is Recommended per OTel spec, but can be large.
+            // Consider logging the full stack trace via ILogger instead and relying
+            // on trace-log correlation. The spec is moving toward log-based
+            // exception recording (OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN).
+            // ["exception.stacktrace"] = ex.ToString()
         }));
     }
     throw;
@@ -244,6 +248,7 @@ catch (Exception ex)
 - Set `ActivityStatusCode.Ok` on success, `ActivityStatusCode.Error` on exception
 - Use `SetStatus` (the SDK translates it to OTel span status) — legacy `otel.status_code`/`otel.status_description` tags are no longer needed
 - Record exception events per [OTel conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions_attributes/)
+- `exception.stacktrace` is **Recommended** by the spec but can bloat spans. Prefer logging the full stack trace via `ILogger` and relying on trace-log correlation. The OTel spec is moving toward log-based exception recording (`OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN`).
 
 ### Activity Events
 

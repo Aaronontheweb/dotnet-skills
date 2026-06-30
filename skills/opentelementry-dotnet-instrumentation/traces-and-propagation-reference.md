@@ -521,7 +521,11 @@ catch (Exception ex)
             {
                 ["exception.type"] = ex.GetType().FullName,
                 ["exception.message"] = ex.Message,
-                ["exception.stacktrace"] = ex.ToString()
+                // exception.stacktrace is Recommended per OTel spec, but can be large.
+                // Consider logging the full stack trace via ILogger instead and relying
+                // on trace-log correlation. The spec is moving toward log-based
+                // exception recording (OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN).
+                // ["exception.stacktrace"] = ex.ToString()
             }
         ));
     }
@@ -544,7 +548,7 @@ catch (HttpRequestException ex) when (ex.StatusCode != null)
         {
             ["exception.type"] = ex.GetType().FullName,
             ["exception.message"] = ex.Message,
-            ["exception.stacktrace"] = ex.ToString()
+            // exception.stacktrace omitted here — log via ILogger instead
         }));
     }
     throw;
