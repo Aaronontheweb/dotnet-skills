@@ -148,7 +148,7 @@ async Task HelperAsync()
 - Always null-check Activity after creation (listener may filter or sample it out)
 - Never start activities in async helper methods (`Activity.Current` uses `AsyncLocal`)
 - Guard expensive tag computation behind `activity.IsAllDataRequested`
-- Always use W3C ID format (default in .NET Core 3.0+ / .NET 5+; on .NET Framework, set `Activity.DefaultIdFormat = ActivityIdFormat.W3C` and `Activity.ForceDefaultIdFormat = true` if the parent uses Hierarchical)
+- Use W3C TraceContext. .NET Core 3.0+ / .NET 5+ uses it by default; older TFMs or .NET Framework apps may set `Activity.DefaultIdFormat = ActivityIdFormat.W3C` at startup and use `Activity.ForceDefaultIdFormat = true` to override hierarchical parents.
 
 ### Activity Naming
 
@@ -195,10 +195,9 @@ Choose the correct `ActivityKind` to clarify the span's role in distributed trac
 activity?.SetTag("myapp.order_id", orderId);
 activity?.SetTag("myapp.payment.status", "confirmed");
 
-// ✅ Infrastructure/library code: use semantic conventions
-// (e.g., custom database client, custom transport, custom messaging library)
-// activity?.SetTag("db.system", "postgresql");
-// activity?.SetTag("http.request.method", "GET");
+// ✅ Manual infrastructure instrumentation: use semantic conventions
+// activity?.SetTag("db.system.name", "postgresql"); // custom database client
+// activity?.SetTag("http.request.method", "GET"); // custom HTTP transport
 
 // Values can be strings, numbers, booleans, or homogeneous arrays
 activity?.SetTag("app.item_count", 42);
@@ -213,8 +212,8 @@ activity?.SetTag("myapp.order-id", orderId);    // ❌ Wrong delimiter
 - Namespace prefix matching your component: `myapp.*`, `myapp.db.*`
 - All lowercase, underscore (`_`) delimiters, singular form
 - Attribute values: string, boolean, double, int64, byte arrays, homogeneous arrays (null/empty valid per [AnyValue spec](https://opentelemetry.io/docs/specs/otel/common/#anyvalue))
-- **Application code**: use your own namespace (`myapp.*`). Do not set infrastructure-level conventions (`db.system`, `http.request.method`, `messaging.*`) — those are already handled by the OTel instrumentation libraries.
-- **Library/infrastructure code**: use [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) when implementing the concept the convention describes (e.g., a custom database client sets `db.system`). Do not use OTel namespaces as a prefix for custom attributes.
+- **Business/domain attributes**: use your own namespace (`myapp.*`).
+- **HTTP, database, messaging, or RPC concepts you manually instrument**: use [semantic conventions](https://opentelemetry.io/docs/specs/semconv/). Do not duplicate attributes already emitted by auto-instrumentation. Do not use OTel namespaces as prefixes for custom attributes.
 
 ### Activity Status and Errors
 
@@ -233,11 +232,8 @@ catch (Exception ex)
         {
             ["exception.type"] = ex.GetType().FullName,
             ["exception.message"] = ex.Message,
-            // exception.stacktrace is Recommended per OTel spec, but can be large.
-            // Consider logging the full stack trace via ILogger instead and relying
-            // on trace-log correlation. The spec is moving toward log-based
-            // exception recording (OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN).
-            // ["exception.stacktrace"] = ex.ToString()
+            // Include unless size/sensitivity/volume policy says otherwise.
+            // ["exception.stacktrace"] = ex.ToString() // Recommended
         }));
     }
     throw;
@@ -247,43 +243,28 @@ catch (Exception ex)
 **Rules**:
 - Set `ActivityStatusCode.Ok` on success, `ActivityStatusCode.Error` on exception
 - Use `SetStatus` (the SDK translates it to OTel span status) — legacy `otel.status_code`/`otel.status_description` tags are no longer needed
-- Record exception events per [OTel conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions_attributes/)
-- `exception.stacktrace` is **Recommended** by the spec but can bloat spans. Prefer logging the full stack trace via `ILogger` and relying on trace-log correlation. The OTel spec is moving toward log-based exception recording (`OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN`).
+- Record exception events per [OTel exception span conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/)
+- `exception.stacktrace` is **Recommended** for exception span events. Include it unless size, sensitivity, or volume policy says otherwise. For high-volume handled exceptions, prefer `ILogger` with trace correlation or the semconv logs opt-in (`OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN`).
 
 ### Activity Events
 
 ```csharp
-// ✅ Use events for additional context (sparingly — stored in-memory until export)
+// ✅ Use events sparingly — stored in-memory until export
 activity?.AddEvent(new ActivityEvent("ItemRetried", tags: new ActivityTagsCollection
 {
     ["retry_attempt"] = retryCount
 }));
-
 // ❌ Don't use events for verbose logging — use ILogger instead
 ```
 
 ### Accessing Activities
 
 ```csharp
-// ❌ WRONG: Activity.Current can be "overloaded" by user code creating
-// their own ambient spans. You might end up tagging a span you don't own.
-var activity = Activity.Current;
-
-// ✅ CORRECT: Capture the activity reference when you create it and use
-// it directly. Don't rely on Activity.Current for spans you own.
-using var activity = ActivitySource.StartActivity("MyOperation");
-// ... later, use the captured reference:
-activity?.SetTag("myapp.key", value);
-
-// If your framework manages its own context bag (e.g., Akka.NET actors),
-// store the activity there and restore it when needed:
-// context.Store(activity);
-// ... later:
-// var activity = context.Retrieve<Activity>();
-// activity?.SetTag("myapp.key", value);
+var current = Activity.Current; // ❌ may be a user-created ambient span
+using var ownedActivity = ActivitySource.StartActivity("MyOperation"); // ✅ captured reference
+ownedActivity?.SetTag("myapp.key", value);
 ```
-
-**Why**: `Activity.Current` uses `AsyncLocal`, which flows across `await` points. If user code between your `StartActivity` and your tag-setting code creates its own activity, `Activity.Current` points to theirs, not yours. Always use the reference you captured.
+**Rules**: Do not rely on `Activity.Current` for spans you own; user code can replace it via `AsyncLocal`. Pass/store captured `Activity` only while alive. Store `ActivityContext` for propagation identity.
 
 ### Span Links
 
@@ -350,9 +331,7 @@ public sealed class OrderProcessingMetrics : IDisposable
 | **ObservableGauge** | `CreateObservableGauge<T>` | Async callback, non-monotonic | CPU/memory usage |
 | **ObservableUpDownCounter** | `CreateObservableUpDownCounter<T>` | Async callback, bi-directional | Active tasks by priority |
 
-See [metrics-and-instruments-reference.md](metrics-and-instruments-reference.md) for
-full creation and recording examples for every instrument type, including callback
-patterns for observable instruments.
+See [metrics-and-instruments-reference.md](metrics-and-instruments-reference.md) for full creation/recording examples and observable callback patterns.
 
 ### Metric Recording Method Naming
 

@@ -521,10 +521,9 @@ catch (Exception ex)
             {
                 ["exception.type"] = ex.GetType().FullName,
                 ["exception.message"] = ex.Message,
-                // exception.stacktrace is Recommended per OTel spec, but can be large.
-                // Consider logging the full stack trace via ILogger instead and relying
-                // on trace-log correlation. The spec is moving toward log-based
-                // exception recording (OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN).
+                // exception.stacktrace is Recommended by the span-event convention.
+                // Include it unless size, sensitivity, or volume policy says otherwise.
+                // For high-volume handled exceptions, prefer ILogger with trace correlation.
                 // ["exception.stacktrace"] = ex.ToString()
             }
         ));
@@ -548,7 +547,7 @@ catch (HttpRequestException ex) when (ex.StatusCode != null)
         {
             ["exception.type"] = ex.GetType().FullName,
             ["exception.message"] = ex.Message,
-            // exception.stacktrace omitted here — log via ILogger instead
+            // Include exception.stacktrace unless size, sensitivity, or volume policy says otherwise
         }));
     }
     throw;
@@ -571,7 +570,7 @@ OTel SDK handles translation to the OTel span status fields automatically.
 
 ### Exception Event Attribute Reference
 
-Per the [OTel exception semantic conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions_attributes/):
+Per the [OTel exception span conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/):
 
 | Attribute | Required | Description |
 |-----------|----------|-------------|
@@ -593,5 +592,5 @@ Per the [OTel exception semantic conventions](https://opentelemetry.io/docs/spec
 - [W3C Baggage](https://www.w3.org/TR/baggage/)
 - [OTel .NET: Creating Links Between Traces](https://opentelemetry.io/docs/languages/dotnet/traces/links-creation/)
 - [OTel .NET: Reporting Exceptions](https://opentelemetry.io/docs/languages/dotnet/traces/reporting-exceptions/)
-- [OTel Exception Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions_attributes/)
+- [OTel Exception Span Conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/)
 - [.NET Distributed Tracing Documentation](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/distributed-tracing)
