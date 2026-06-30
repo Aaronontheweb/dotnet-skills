@@ -1,12 +1,8 @@
 # Metrics and Instruments Reference
 
-Detailed reference for all metric instrument types in .NET,
-including observable instrument callback patterns, dimensions management,
-exemplars, aggregation, and units guidance.
+Detailed reference for all metric instrument types in .NET, including observable instrument callback patterns, dimensions management, exemplars, aggregation, and units guidance.
 
-This is a companion to [SKILL.md](SKILL.md). See it for core principles, the
-"System.Diagnostics first" architecture, metrics naming conventions, and
-metric recording method naming.
+This is a companion to [SKILL.md](SKILL.md). See it for core principles, the "System.Diagnostics-first" architecture, metrics naming conventions, and metric recording method naming.
 
 ## Table of Contents
 
@@ -29,9 +25,7 @@ metric recording method naming.
 
 ## Instrument Type Overview
 
-.NET provides 7 metric instrument types (the 6 defined by the OTel specification
-plus a synchronous `Gauge` added in .NET 9). All are available via
-`System.Diagnostics.Metrics.Meter`. They fall into two categories:
+.NET provides 7 metric instrument types (the 6 defined by the OTel specification plus a synchronous `Gauge` added in .NET 9). All are available via `System.Diagnostics.Metrics.Meter`. They fall into two categories:
 
 ### Synchronous Instruments (called when an event occurs)
 
@@ -72,8 +66,7 @@ Is the value a cumulative total that only goes up?
 
 ## Counter
 
-A Counter records a monotonically increasing value. You can only add non-negative
-values. Use for counting events: requests, errors, bytes transferred.
+A Counter records a monotonically increasing value. You can only add non-negative values. Use for counting events: requests, errors, and bytes transferred.
 
 ### Creating a Counter
 
@@ -113,8 +106,7 @@ bytesSentCounter.Add(1024,
 
 ## UpDownCounter
 
-An UpDownCounter records a value that can both increase and decrease. Use for
-tracking current values: queue sizes, active connections, resource pool usage.
+An UpDownCounter records a value that can both increase and decrease. Use for tracking current values: queue sizes, active connections, resource pool usage.
 
 ### Creating an UpDownCounter
 
@@ -149,9 +141,7 @@ activeConnections.Add(-1,
 
 ## Histogram
 
-A Histogram records the distribution of values — capturing count, sum, min, max,
-and configurable bucket boundaries for percentile estimation. Use for measuring
-durations, response sizes, and any value where you need percentiles (p50, p95, p99).
+A Histogram records the distribution of values — capturing count, sum, min, max, and configurable bucket boundaries for percentile estimation. Use for measuring durations, response sizes, and any value where you need percentiles (p50, p95, p99).
 
 ### Creating a Histogram
 
@@ -205,9 +195,7 @@ builder.Services.AddOpenTelemetry()
 
 ## Gauge (.NET 9+)
 
-A Gauge records the current value of a measurement at a specific point in time.
-This is a synchronous instrument — you call it when the event occurs. Use for
-non-cumulative instantaneous measurements.
+A Gauge records the current value of a measurement at a specific point in time. This is a synchronous instrument — you call it when the event occurs. Use for non-cumulative instantaneous measurements.
 
 ### Creating a Gauge
 
@@ -238,9 +226,7 @@ temperatureGauge.Record(23.5,
 
 ## ObservableCounter
 
-An ObservableCounter is an asynchronous instrument that reports a monotonically
-increasing value via a callback. The SDK calls the callback at collection intervals.
-Use for values that are maintained externally and only read periodically.
+An ObservableCounter is an asynchronous instrument that reports a monotonically increasing value via a callback. The SDK calls the callback at collection intervals. Use for values that are maintained externally and only read periodically.
 
 ### Creating an ObservableCounter
 
@@ -278,9 +264,7 @@ meter.CreateObservableCounter<long>(
 
 ## ObservableGauge
 
-An ObservableGauge is an asynchronous instrument that reports the current value
-of a measurement via a callback. Use for values read from the system at collection
-intervals: CPU usage, memory, temperature, queue depth.
+An ObservableGauge is an asynchronous instrument that reports the current measurement value via a callback. Use for values read from the system at collection intervals: CPU usage, memory, temperature, and queue depth.
 
 ### Creating an ObservableGauge
 
@@ -317,9 +301,7 @@ meter.CreateObservableGauge<double>(
 
 ## ObservableUpDownCounter
 
-An ObservableUpDownCounter is an asynchronous instrument that reports a value
-that can increase or decrease, via a callback. Use for tracking current counts
-that are maintained externally.
+An ObservableUpDownCounter is an asynchronous instrument that reports a value that can increase or decrease, via a callback. Use for tracking current counts that are maintained externally.
 
 ### Creating an ObservableUpDownCounter
 
@@ -345,9 +327,7 @@ meter.CreateObservableUpDownCounter<int>(
 
 ## Batching Observable Measurements
 
-For multiple observable instruments that share collection logic, define a single
-method that returns measurements. Each instrument registers independently with its
-own callback delegate that calls the shared logic:
+For multiple observable instruments that share collection logic, define a single method that returns measurements. Each instrument registers independently with its own callback delegate that calls the shared logic:
 
 ```csharp
 // Shared data-gathering method
@@ -360,8 +340,7 @@ var observableCounter = meter.CreateObservableCounter<long>(
     "myapp.items_processed", () => CollectProcessed(), unit: "{item}");
 ```
 
-For instruments of different numeric types, use separate callbacks. The key pattern
-is to share the underlying data-gathering logic, not to batch the SDK callback itself.
+For instruments of different numeric types, use separate callbacks. The key pattern is to share the underlying data-gathering logic, not to batch the SDK callback itself.
 
 ---
 
@@ -369,10 +348,7 @@ is to share the underlying data-gathering logic, not to batch the SDK callback i
 
 ### Cardinality Management
 
-Each unique combination of attribute key-value pairs creates a separate time series.
-High-cardinality dimensions (e.g., user IDs, request IDs, exception messages) cause
-**cardinality explosion** — each unique value creates a new time series row, leading
-to excessive memory and storage usage.
+Each unique combination of attribute key-value pairs creates a separate time series. High-cardinality dimensions (e.g., user IDs, request IDs, exception messages) cause **cardinality explosion** — each unique value creates a new time series row, leading to excessive memory and storage usage.
 
 ```csharp
 // ✅ CORRECT: Low-cardinality dimensions — finite, small set of values
@@ -390,12 +366,9 @@ counter.Add(1,
 
 ### Cardinality Limits in the OTel SDK
 
-The OTel .NET SDK has a configurable cardinality limit (default: 2000 attribute
-combinations per instrument). When exceeded, new combinations are dropped. This is
-a safety valve, not a design target — you should design for low cardinality.
+The OTel .NET SDK has a configurable cardinality limit (default: 2000 attribute combinations per instrument). When exceeded, new combinations are dropped. This is a safety valve, not a design target — you should design for low cardinality.
 
-Configure via the `OTEL_DOTNET_EXPERIMENTAL_METRICS_CARDINALITY_LIMIT` environment
-variable or in code.
+Configure via the `OTEL_DOTNET_EXPERIMENTAL_METRICS_CARDINALITY_LIMIT` environment variable or in code.
 
 ### High-Cardinality Opt-In Pattern
 
@@ -440,11 +413,7 @@ public sealed class OrderProcessingMetrics : IDisposable
 
 ## Exemplars
 
-[Exemplars](https://opentelemetry.io/docs/specs/otel/metrics/sdk/#exemplar) are
-metric measurements that carry an associated trace context (TraceId/SpanId).
-They enable correlating metric data points with specific traces, making it
-possible to jump from a metric spike in a dashboard to the exact trace that
-contributed to that measurement.
+[Exemplars](https://opentelemetry.io/docs/specs/otel/metrics/sdk/#exemplar) are metric measurements that carry an associated trace context (TraceId/SpanId). They enable correlating metric data points with specific traces, allowing jumping from a metric spike on a dashboard to the exact trace that contributed to that measurement.
 
 ### Enabling Exemplars in .NET
 
@@ -485,8 +454,7 @@ The SDK provides default reservoirs:
 | `AlignedHistogramBucketExemplarReservoir` | One exemplar per histogram bucket (default for histograms) |
 | `SimpleFixedSizeExemplarReservoir` | Fixed-size pool, randomly samples |
 
-You typically don't configure these directly — the SDK selects appropriate
-defaults based on instrument type.
+You typically don't configure these directly — the SDK selects appropriate defaults based on instrument type.
 
 See [OTel .NET: Using Exemplars](https://opentelemetry.io/docs/languages/dotnet/metrics/exemplars/).
 
@@ -494,8 +462,7 @@ See [OTel .NET: Using Exemplars](https://opentelemetry.io/docs/languages/dotnet/
 
 ## Aggregation Defaults
 
-The SDK applies default aggregations based on instrument type. You can override
-these via **Views**:
+The SDK applies default aggregations based on instrument type. You can override these via **Views**:
 
 | Instrument | Default Aggregation |
 |------------|---------------------|
@@ -547,9 +514,7 @@ OTel uses [UCUM (Unified Code for Units of Measure)](https://ucum.org/) notation
 
 ### Annotated Units
 
-Use curly braces for "annotated" units — units that represent a count of something
-specific: `{request}`, `{order}`, `{connection}`, `{message}`. This distinguishes
-them from plain integers and enables better semantic interpretation by backends.
+Use curly braces for "annotated" units — units that represent a count of something specific: `{request}`, `{order}`, `{connection}`, `{message}`. This distinguishes them from plain integers and enables backends to interpret them more semantically.
 
 ### Rules
 

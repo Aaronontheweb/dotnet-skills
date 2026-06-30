@@ -15,6 +15,7 @@ tags:
 # OpenTelemetry .NET Instrumentation Skill
 
 ## When to Use
+
 - Adding OpenTelemetry instrumentation to .NET code (traces, metrics, logs)
 - Creating or modifying ActivitySources, Meters, or ILogger usage
 - Setting up the OpenTelemetry SDK, resources, exporters, or sampling
@@ -459,9 +460,7 @@ private readonly Meter meter = new("MyApp.MyComponent", "0.8.0");
 
 .NET logs integrate with OpenTelemetry through the built-in `ILogger` API. The OTel SDK provides `AddOpenTelemetry()` on the logging builder to collect, process, and export logs. Log records are automatically correlated with traces via `TraceId`/`SpanId`.
 
-See [sdk-resources-and-logs-reference.md](sdk-resources-and-logs-reference.md) for
-full logs integration patterns including correlation, redaction, structured logging,
-and severity filtering.
+See [sdk-resources-and-logs-reference.md](sdk-resources-and-logs-reference.md) for full logs integration patterns including correlation, redaction, structured logging, and severity filtering.
 
 ## Reference Files
 
