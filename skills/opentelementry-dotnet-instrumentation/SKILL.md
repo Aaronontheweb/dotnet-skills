@@ -25,10 +25,8 @@ tags:
 
 ## Architecture: .NET Is Different
 
-**CRITICAL**: The .NET OpenTelemetry implementation is fundamentally different from other
-platforms. .NET provides tracing, metrics, and logging APIs **in the framework itself**.
-That means **OTel does not provide a separate instrumentation API** — it uses the built-in
-.NET APIs and acts as the collection/export layer.
+**CRITICAL**: The .NET OpenTelemetry implementation is fundamentally different from other platforms. .NET provides tracing, metrics, and logging APIs **in the framework itself**.
+That means **OTel does not provide a separate instrumentation API** — it uses the built-in .NET APIs and acts as the collection/export layer.
 
 ### The Three Built-in .NET APIs (Primary — Zero Dependencies)
 
@@ -69,14 +67,11 @@ composition root (not in libraries):
 **Library authors**: Add **nothing**. Use only `System.Diagnostics.*` and `ILogger`.
 The consuming application wires up the SDK and exporters.
 
-**Application authors**: Add `OpenTelemetry.Extensions.Hosting` + the exporters and
-instrumentation libraries you need. See [sdk-resources-and-logs-reference.md](sdk-resources-and-logs-reference.md)
-for full setup patterns.
+**Application authors**: Add `OpenTelemetry.Extensions.Hosting` + the exporters and instrumentation libraries you need. See [sdk-resources-and-logs-reference.md](sdk-resources-and-logs-reference.md) for full setup patterns.
 
 **Never add** `OpenTelemetry.Api` to a library — `System.Diagnostics.*` IS the API.
 
-For SDK setup, resource configuration, exporters, sampling, and logs integration, see
-[sdk-resources-and-logs-reference.md](sdk-resources-and-logs-reference.md).
+For SDK setup, resource configuration, exporters, sampling, and logs integration, see [sdk-resources-and-logs-reference.md](sdk-resources-and-logs-reference.md).
 
 ## Core Principles
 
@@ -268,8 +263,7 @@ ownedActivity?.SetTag("myapp.key", value);
 
 ### Span Links
 
-Links connect a span to other spans that are causally related but not in a direct
-parent-child relationship — batch processing, scatter/gather, trace boundary crossings.
+Links connect a span to other spans that are causally related but not in a direct parent-child relationship — batch processing, scatter/gather, trace boundary crossings.
 
 ```csharp
 var links = new List<ActivityLink>
@@ -282,18 +276,13 @@ var activity = ActivitySource.StartActivity(
     ActivityKind.Internal, name: "batch-process", links: links);
 ```
 
-See [traces-and-propagation-reference.md](traces-and-propagation-reference.md) for full
-link patterns including batch processing, scatter/gather, and trace boundary crossing.
+See [traces-and-propagation-reference.md](traces-and-propagation-reference.md) for full link patterns including batch processing, scatter/gather, and trace boundary crossing.
 
 ### Context Propagation
 
-Distributed tracing requires propagating trace context across process boundaries
-(HTTP calls, message queues, etc.) using W3C `traceparent` headers. In .NET this is
-handled by `DistributedContextPropagator`. The OTel SDK configures W3C TraceContext
-propagation by default.
+Distributed tracing requires propagating trace context across process boundaries (HTTP calls, message queues, etc.) using W3C `traceparent` headers. In .NET, this is handled by `DistributedContextPropagator`. The OTel SDK configures W3C TraceContext propagation by default.
 
-See [traces-and-propagation-reference.md](traces-and-propagation-reference.md) for
-propagation patterns, custom propagators, and manual inject/extract for non-standard transports.
+See [traces-and-propagation-reference.md](traces-and-propagation-reference.md) for propagation patterns, custom propagators, and manual inject/extract for non-standard transports.
 
 ## Metrics
 
@@ -468,9 +457,7 @@ private readonly Meter meter = new("MyApp.MyComponent", "0.8.0");
 
 ## Logs
 
-.NET logs integrate with OpenTelemetry through the built-in `ILogger` API. The OTel
-SDK provides `AddOpenTelemetry()` on the logging builder to collect, process, and export
-logs. Log records are automatically correlated with traces via `TraceId`/`SpanId`.
+.NET logs integrate with OpenTelemetry through the built-in `ILogger` API. The OTel SDK provides `AddOpenTelemetry()` on the logging builder to collect, process, and export logs. Log records are automatically correlated with traces via `TraceId`/`SpanId`.
 
 See [sdk-resources-and-logs-reference.md](sdk-resources-and-logs-reference.md) for
 full logs integration patterns including correlation, redaction, structured logging,
