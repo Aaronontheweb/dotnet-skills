@@ -265,12 +265,25 @@ activity?.AddEvent(new ActivityEvent("ItemRetried", tags: new ActivityTagsCollec
 ### Accessing Activities
 
 ```csharp
-// ❌ WRONG: Activity.Current might be a user-created span, not yours
+// ❌ WRONG: Activity.Current can be "overloaded" by user code creating
+// their own ambient spans. You might end up tagging a span you don't own.
 var activity = Activity.Current;
 
-// ✅ CORRECT: Pass Activity explicitly or via a dedicated context object
-if (context.TryGetActivity(out var activity)) { activity?.SetTag("custom", "value"); }
+// ✅ CORRECT: Capture the activity reference when you create it and use
+// it directly. Don't rely on Activity.Current for spans you own.
+using var activity = ActivitySource.StartActivity("MyOperation");
+// ... later, use the captured reference:
+activity?.SetTag("myapp.key", value);
+
+// If your framework manages its own context bag (e.g., Akka.NET actors),
+// store the activity there and restore it when needed:
+// context.Store(activity);
+// ... later:
+// var activity = context.Retrieve<Activity>();
+// activity?.SetTag("myapp.key", value);
 ```
+
+**Why**: `Activity.Current` uses `AsyncLocal`, which flows across `await` points. If user code between your `StartActivity` and your tag-setting code creates its own activity, `Activity.Current` points to theirs, not yours. Always use the reference you captured.
 
 ### Span Links
 
