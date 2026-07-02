@@ -378,60 +378,147 @@ With these, you do NOT need to manually propagate context for HTTP calls.
 ### Manual Propagation (Custom Transports)
 
 For non-standard transports (raw TCP, custom protocols, message systems without
-built-in instrumentation), use the OTel SDK's `TextMapPropagator` (from
-`OpenTelemetry.Context.Propagation`, requires an OTel NuGet package at the
-application root) to manually inject/extract context:
+built-in instrumentation), the default choice is the built-in
+`System.Diagnostics.DistributedContextPropagator` — it ships with the runtime
+(`System.Diagnostics.DiagnosticSource`, .NET 6+), so a library or custom transport
+needs **zero** OTel packages to propagate context. This follows the same
+"System.Diagnostics first" rule as `ActivitySource` vs `OpenTelemetry.Api`: the
+propagation API is already in the framework.
+
+This is also exactly what the platform itself does: `HttpClient`
+(SocketsHttpHandler) and ASP.NET Core inject/extract `traceparent`/`tracestate`/
+baggage through `DistributedContextPropagator.Current`. A custom transport that
+uses the same mechanism behaves identically to the built-in ones, and the
+application root keeps control of propagation policy by setting
+`DistributedContextPropagator.Current` — see
+[Configuring the BCL Propagator](#configuring-the-bcl-propagator-application-root).
 
 ```csharp
-using OpenTelemetry.Context.Propagation;
-
-// ✅ Manual inject for outgoing call
+// ✅ Manual inject for outgoing call — library code, no OTel packages
 using var activity = ActivitySource.StartActivity("SendMessage", ActivityKind.Client);
 
 if (activity != null)
 {
     var headers = new Dictionary<string, string>();
-    var propagator = Propagators.DefaultTextMapPropagator;
-    propagator.Inject(new PropagationContext(activity.Context, Baggage.Current),
-        headers,
-        static (carrier, name, value) => ((Dictionary<string, string>)carrier!)[name] = value!);
+    DistributedContextPropagator.Current.Inject(activity, headers,
+        static (carrier, name, value) => ((Dictionary<string, string>)carrier!)[name] = value);
 
     await SendMessageAsync(payload, headers);
 }
 ```
 
 ```csharp
-// ✅ Manual extract for incoming request
-var propagator = Propagators.DefaultTextMapPropagator;
-var extracted = propagator.Extract(default, incomingHeaders,
-    static (carrier, name) =>
+// ✅ Manual extract for incoming request — library code, no OTel packages
+DistributedContextPropagator.Current.ExtractTraceIdAndState(incomingHeaders,
+    static (object? carrier, string name, out string? value, out IEnumerable<string>? values) =>
     {
-        if (((Dictionary<string, string>)carrier!).TryGetValue(name, out var value))
-            return new[] { value };
-        return null;
-    });
+        values = null;
+        ((Dictionary<string, string>)carrier!).TryGetValue(name, out value);
+    },
+    out var traceParent, out var traceState);
 
 // Create a server span with the extracted parent context
 using var activity = ActivitySource.StartActivity(
-    ActivityKind.Server,
-    name: "ReceiveMessage",
-    parentId: extracted.ActivityContext.TraceId != default
-        ? extracted.ActivityContext
-        : default);
+    "ReceiveMessage", ActivityKind.Server, parentId: traceParent);
+
+if (activity != null && traceState != null)
+{
+    activity.TraceStateString = traceState;
+}
 ```
 
-For library code (no OTel packages), use the built-in `DistributedContextPropagator`
-APIs: `DistributedContextPropagator.Current.Inject(activity, carrier, setter)` for
-injection, and `DistributedContextPropagator.Current.ExtractTraceIdAndState(...)`
-for extraction. These use the same `traceparent` header format.
+Baggage can be extracted with
+`DistributedContextPropagator.Current.ExtractBaggage(carrier, getter)`.
 
-### Custom Propagators
+#### Application-level alternative: OTel `TextMapPropagator`
 
-You can configure which propagators are active. For example, to support both
-W3C TraceContext and Baggage propagation (the OTel default composite):
+Use the OTel SDK's `TextMapPropagator` (from `OpenTelemetry.Context.Propagation`)
+**only when the built-in propagator cannot do the job, and only at the application
+root** — never in libraries. The legitimate cases are needing OTel `Baggage.Current`
+or a non-W3C wire format such as B3 (see below):
 
 ```csharp
-// Application setup
+using OpenTelemetry.Context.Propagation;
+
+// Manual inject for outgoing call (application code)
+var headers = new Dictionary<string, string>();
+var propagator = Propagators.DefaultTextMapPropagator;
+propagator.Inject(new PropagationContext(activity.Context, Baggage.Current),
+    headers,
+    static (carrier, name, value) => ((Dictionary<string, string>)carrier!)[name] = value!);
+```
+
+Note that `Sdk.SetDefaultTextMapPropagator` (OTel) and
+`DistributedContextPropagator.Current` (BCL) are separate registries that do not
+know about each other. An application that configures a non-default OTel propagator
+may therefore also need to **bridge** it into `DistributedContextPropagator.Current`
+(a small `DistributedContextPropagator` subclass wrapping the `TextMapPropagator`),
+otherwise `HttpClient`, ASP.NET Core, and BCL-propagating libraries will still
+emit/parse W3C headers. Libraries stay on `DistributedContextPropagator` regardless
+— bridging is an application-root concern.
+
+### Configuring the BCL Propagator (Application Root)
+
+`DistributedContextPropagator.Current` is a process-wide, settable static. Whatever
+the application root assigns here is what `HttpClient`, ASP.NET Core, and any
+library using the BCL pattern above will use:
+
+```csharp
+// Application setup — affects HttpClient, ASP.NET Core, and all BCL-propagating code
+DistributedContextPropagator.Current = DistributedContextPropagator.CreateW3CPropagator();
+```
+
+Built-in factories:
+
+| Factory | Behavior |
+|---------|----------|
+| `CreateDefaultPropagator()` | What `Current` is initialized with. Up to .NET 9: the legacy propagator (lenient encoding, baggage in the non-standard `Correlation-Context` header). **From .NET 10: the W3C propagator** ([breaking change](https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/10.0/default-trace-context-propagator)) |
+| `CreateW3CPropagator()` (.NET 10+) | Strict [W3C TraceContext](https://www.w3.org/TR/trace-context/) + [W3C Baggage](https://www.w3.org/TR/baggage/) — baggage in the `baggage` header, W3C-compliant encoding |
+| `CreatePreW3CPropagator()` (.NET 10+) | The legacy behavior, for backward compatibility after the .NET 10 default change |
+| `CreateNoOutputPropagator()` | Suppresses all outbound propagation — useful at trust boundaries (e.g., calls to third-party APIs that should not see your trace context) |
+| `CreatePassThroughPropagator()` | Forwards the headers received on the inbound request unchanged, using the root `Activity` and ignoring intermediate spans — useful for proxies/gateways |
+
+For a custom wire format, subclass `DistributedContextPropagator` and override its
+four abstract members:
+
+```csharp
+public sealed class CustomHeaderPropagator : DistributedContextPropagator
+{
+    public override IReadOnlyCollection<string> Fields { get; } = ["x-my-trace"];
+
+    public override void Inject(Activity? activity, object? carrier, PropagatorSetterCallback? setter)
+    {
+        if (activity is null || setter is null) return;
+        setter(carrier, "x-my-trace", activity.Id ?? string.Empty);
+    }
+
+    public override void ExtractTraceIdAndState(object? carrier, PropagatorGetterCallback? getter,
+        out string? traceId, out string? traceState)
+    {
+        traceId = null;
+        traceState = null;
+        if (getter is null) return;
+        getter(carrier, "x-my-trace", out traceId, out _);
+    }
+
+    public override IEnumerable<KeyValuePair<string, string?>>? ExtractBaggage(
+        object? carrier, PropagatorGetterCallback? getter) => null; // no baggage support
+}
+
+// Application setup — HttpClient and ASP.NET Core now speak this format too
+DistributedContextPropagator.Current = new CustomHeaderPropagator();
+```
+
+### Custom Propagators (OTel SDK)
+
+Configure OTel propagators **only at the application root, and only when you need
+to deviate from the W3C defaults** — the SDK already ships with the composite of
+`TraceContextPropagator` + `BaggagePropagator`, so restating that buys nothing.
+The example below shows the shape of the call; in practice you would add or replace
+entries (e.g., B3, see below):
+
+```csharp
+// Application setup — only needed when deviating from the W3C defaults
 Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
     new TextMapPropagator[]
     {
@@ -443,7 +530,8 @@ Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
 ### B3 Propagator (Legacy Compatibility)
 
 If you need to interoperate with systems using the [B3 propagation format](https://github.com/openzipkin/b3-propagation)
-(Zipkin-style), install `OpenTelemetry.Extensions.Propagators` and configure:
+(Zipkin-style), install `OpenTelemetry.Extensions.Propagators` at the application
+root and configure:
 
 ```csharp
 Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
@@ -454,6 +542,11 @@ Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
         new B3Propagator()  // legacy B3 multi-header format
     }));
 ```
+
+This changes only the OTel registry — `HttpClient`, ASP.NET Core, and libraries
+using `DistributedContextPropagator` still speak W3C. If B3 must apply to those
+too, bridge the composite into `DistributedContextPropagator.Current` as described
+above.
 
 ---
 
