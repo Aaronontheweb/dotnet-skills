@@ -25,11 +25,23 @@ to other spans. It describes two independent properties:
 
 1. Whether a span represents an **outgoing call** (`Client`/`Producer`) or
    **incoming request processing** (`Server`/`Consumer`)
-2. Whether a span is a **request/response** (`Client`/`Server`) or
-   **deferred execution** (`Producer`/`Consumer`)
+2. Whether the communication is **synchronous** — the caller awaits a response
+   (`Client`/`Server`, request/response) — or **asynchronous** — the initiator
+   hands off work and does not wait for the outcome (`Producer`/`Consumer`,
+   deferred execution)
+
+| ActivityKind | Call direction | Communication style              |
+|--------------|----------------|----------------------------------|
+| `Client`     | outgoing       | synchronous (request/response)   |
+| `Server`     | incoming       | synchronous (request/response)   |
+| `Producer`   | outgoing       | asynchronous (deferred execution)|
+| `Consumer`   | incoming       | asynchronous (deferred execution)|
+| `Internal`   | — (in-process) | —                                |
 
 A single span SHOULD NOT serve more than one purpose. If you need to describe both
-an incoming request and an outgoing call, create separate spans.
+an incoming request and an outgoing call, create separate spans — e.g., a `Server`
+span handling a request SHOULD NOT also describe an outgoing call it makes; that
+call is its own `Client` (or `Producer`) child span.
 
 ### Internal (Default)
 
@@ -52,7 +64,8 @@ Processing an incoming remote request.
 // HTTP server handler
 using var activity = ActivitySource.StartActivity("HandleRequest", ActivityKind.Server);
 activity?.SetTag("http.request.method", "GET");
-activity?.SetTag("url.full", requestUrl);
+activity?.SetTag("url.path", "/orders");
+activity?.SetTag("url.scheme", "https");
 activity?.SetTag("server.address", "myapp.example.com");
 activity?.SetTag("server.port", 8080);
 ```
@@ -76,8 +89,10 @@ activity?.SetTag("url.full", "https://api.example.com/orders");
 activity?.SetTag("server.address", "api.example.com");
 ```
 
-**Use when**: your code is the client side of a client/server interaction —
-HTTP client call, database query, RPC invocation.
+**Use when**: your code makes any **synchronous** outgoing remote call — one where
+it awaits the response — HTTP client call, database query, cache lookup, RPC
+invocation. `Client` is not limited to RPC: a SQL query or Redis `GET` is a
+`Client` span because the caller blocks for the result.
 
 **Key**: the OTel SDK's HttpClient instrumentation automatically creates `Client`
 spans for outgoing HTTP calls. Only create your own `Client` span for custom
@@ -104,7 +119,7 @@ activity?.SetTag("messaging.operation.name", "publish");
 **Use when**: your code enqueues or publishes deferred work that will be processed
 asynchronously later — message queue publish, event bus emit, job enqueue.
 
-The key difference from `Client`: a `Client` span expects a response (request/response),
+The key difference from `Client`: a `Client` span awaits a response (request/response),
 while a `Producer` span represents handing work to another component for later processing.
 The context is propagated so the downstream `Consumer` span can link back.
 
