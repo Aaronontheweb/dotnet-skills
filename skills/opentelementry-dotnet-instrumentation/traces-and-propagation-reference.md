@@ -139,8 +139,15 @@ activity?.SetTag("messaging.operation.name", "receive");
 previously produced by a `Producer` span — message queue consume, background job
 processing, event handler, job dequeue.
 
-The `Consumer` span's parent is typically the `Producer` span (propagated via context),
-creating a causal link across the asynchronous boundary.
+The `Consumer` span's parent is typically the `Producer` span (the propagated
+message creation context), creating a causal link across the asynchronous boundary.
+Note that per the
+[messaging semantic conventions](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/),
+only the `process` operation is kind `Consumer` — a pull-based `receive` is kind
+`Client`, because pulling from the broker is a synchronous request/response with
+the broker. The semconv also supports parenting the `process` span under the local
+ambient context with a span link back to the producer — see
+[Messaging Consumer Parenting Example](#messaging-consumer-parenting-example).
 
 ### SpanKind Decision Flowchart
 
@@ -170,9 +177,11 @@ different traces.
 - **Batch processing**: a single span processes items from multiple upstream spans
 - **Scatter/gather (fork/join)**: a root span fans out to multiple operations, then
   an aggregation span links back to all of them
-- **Trace boundary crossing**: when a new trace is created at a trust boundary,
+- **Trust boundary crossing**: when a new trace is created at a trust boundary,
   link back to the originating trace
 - **Fan-in**: multiple incoming messages trigger a single processing span
+- **Messaging consumer parenting**: a `process` span parented under the local
+  ambient context links back to the message's creation context (see below)
 
 ### Creating Links
 
@@ -247,7 +256,7 @@ public async Task<AggregatedResult> ScatterGatherAsync(List<Input> inputs)
 }
 ```
 
-### Trace Boundary Crossing
+### Trust Boundary Crossing
 
 When a service creates a new trace rather than trusting the incoming context
 (e.g., at a security/trust boundary), link back to the originating trace.
@@ -276,6 +285,42 @@ public async Task HandleUntrustedRequest(ActivityContext incomingContext)
         Activity.Current = previousActivity; // restore context
     }
 }
+```
+
+### Messaging Consumer Parenting Example
+
+The [messaging semantic conventions](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/)
+allow — and default to — parenting the `process` span under the local ambient
+context instead of the producer, with a **span link** to the producer's message
+creation context. In a pull-based consumer that ambient parent is the `receive`
+span, which the semconv assigns kind `Client` (pulling from the broker is a
+synchronous request/response with the broker; only the `process` span is
+`Consumer`):
+
+```
+Producer service                     Consumer service (pull-based)
+────────────────                     ─────────────────────────────
+send order.events (PRODUCER) ──┐     poll loop (INTERNAL)
+                               │       └─ receive (CLIENT)  ← sync call to broker
+     creation context          │            └─ process (CONSUMER)
+     travels in the message    └──────────────── link ──────┘
+```
+
+Here the `Consumer` span's direct parent is a `Client` span; the producer
+relationship is expressed as a link, not parenthood. If you instead parent the
+`process` span directly under the producer's creation context, the semconv says
+the ambient context SHOULD be added as a link on the `process` span to preserve
+that correlation.
+
+```csharp
+// process span: parented under the ambient context (the Client receive span),
+// linked to the message's creation context extracted from the message headers
+var creationContext = ExtractContext(message.Headers); // via Propagator, see below
+
+using var processActivity = ActivitySource.StartActivity(
+    ActivityKind.Consumer,
+    name: "ProcessOrderEvent",
+    links: [new ActivityLink(creationContext)]);
 ```
 
 ### Link Best Practices
