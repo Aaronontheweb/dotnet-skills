@@ -1,5 +1,13 @@
 # Release Notes
 
+## v1.4.1 (2026-07-03)
+
+### Skill Enhancements
+
+- **opentelemetry-dotnet-instrumentation: major overhaul** - Rewrote the skill from a single 477-line file into a 4-file progressive-disclosure suite covering the full OTel spec as it applies to .NET. Added an "Architecture: .NET Is Different" section establishing `System.Diagnostics.*` as the primary instrumentation API (no OTel NuGet packages needed for library authors), with a package decision table. New reference files cover traces and propagation (SpanKind, links, baggage, W3C context propagation), metrics and instruments (all 7 instrument types, dimensions, exemplars, Views), and SDK setup (ASP.NET Core + Console initialization, ResourceBuilder, exporters, sampling, ILogger integration). Fixed incorrect claims about attribute value types, legacy exception status tags, fabricated APIs, compile errors, wrong span hierarchy, and broken scatter/gather patterns. ([#69](https://github.com/Aaronontheweb/dotnet-skills/pull/69))
+
+---
+
 ## v1.4.0 (2026-06-18)
 
 ### New Skills
