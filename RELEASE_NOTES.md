@@ -1,5 +1,17 @@
 # Release Notes
 
+## v1.4.1 (2026-07-03)
+
+### Skill Enhancements
+
+- **opentelemetry-dotnet-instrumentation: comprehensive overhaul** - Expanded the OpenTelemetry skill from a single 477-line file to a 4-file progressive-disclosure skill suite covering the full OTel specification as it applies to .NET. Added new reference files for metrics/instruments, SDK resources/logs, and traces/propagation. Fixed fabricated APIs, compile errors, incorrect async/AsyncLocal claims, wrong span hierarchy, broken scatter/gather patterns, and missing null-checks. Clarified .NET-specific guidance including `ActivitySource` hierarchy, `ActivityKind` usage, W3C ID format rules, dangling span prevention, semantic conventions, and exception handling. ([#69](https://github.com/Aaronontheweb/dotnet-skills/pull/69))
+
+### Issues Fixed
+
+- [#69](https://github.com/Aaronontheweb/dotnet-skills/pull/69) - Overhaul otel skill with latest updates
+
+---
+
 ## v1.4.0 (2026-06-18)
 
 ### New Skills
