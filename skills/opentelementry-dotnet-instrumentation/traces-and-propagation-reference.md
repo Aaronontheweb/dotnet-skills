@@ -289,13 +289,7 @@ public async Task HandleUntrustedRequest(ActivityContext incomingContext)
 
 ### Messaging Consumer Parenting Example
 
-The [messaging semantic conventions](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/)
-allow — and default to — parenting the `process` span under the local ambient
-context instead of the producer, with a **span link** to the producer's message
-creation context. In a pull-based consumer that ambient parent is the `receive`
-span, which the semconv assigns kind `Client` (pulling from the broker is a
-synchronous request/response with the broker; only the `process` span is
-`Consumer`):
+The [messaging semantic conventions](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/) allow — and default to — parenting the `process` span under the local ambient context instead of the producer, with a **span link** to the producer's message creation context. In a pull-based consumer that ambient parent is the `receive` span, which the semconv assigns kind `Client` (pulling from the broker is a synchronous request/response with the broker; only the `process` span is `Consumer`):
 
 ```
 Producer service                     Consumer service (pull-based)
@@ -306,11 +300,7 @@ send order.events (PRODUCER) ──┐     poll loop (INTERNAL)
      travels in the message    └──────────────── link ──────┘
 ```
 
-Here the `Consumer` span's direct parent is a `Client` span; the producer
-relationship is expressed as a link, not parenthood. If you instead parent the
-`process` span directly under the producer's creation context, the semconv says
-the ambient context SHOULD be added as a link on the `process` span to preserve
-that correlation.
+Here the `Consumer` span's direct parent is a `Client` span; the producer relationship is expressed as a link, not parenthood. If you instead parent the `process` span directly under the producer's creation context, the semconv says the ambient context SHOULD be added as a link on the `process` span to preserve that correlation.
 
 ```csharp
 // process span: parented under the ambient context (the Client receive span),
@@ -378,20 +368,10 @@ With these, you do NOT need to manually propagate context for HTTP calls.
 ### Manual Propagation (Custom Transports)
 
 For non-standard transports (raw TCP, custom protocols, message systems without
-built-in instrumentation), the default choice is the built-in
-`System.Diagnostics.DistributedContextPropagator` — it ships with the runtime
-(`System.Diagnostics.DiagnosticSource`, .NET 6+), so a library or custom transport
-needs **zero** OTel packages to propagate context. This follows the same
-"System.Diagnostics first" rule as `ActivitySource` vs `OpenTelemetry.Api`: the
-propagation API is already in the framework.
+built-in instrumentation), the default choice is the built-in `System.Diagnostics.DistributedContextPropagator` — it ships with the runtime (`System.Diagnostics.DiagnosticSource`, .NET 6+), so a library or custom transport needs **zero** OTel packages to propagate context. This follows the same "System.Diagnostics first" rule as `ActivitySource` vs `OpenTelemetry.Api`: the propagation API is already in the framework.
 
-This is also exactly what the platform itself does: `HttpClient`
-(SocketsHttpHandler) and ASP.NET Core inject/extract `traceparent`/`tracestate`/
-baggage through `DistributedContextPropagator.Current`. A custom transport that
-uses the same mechanism behaves identically to the built-in ones, and the
-application root keeps control of propagation policy by setting
-`DistributedContextPropagator.Current` — see
-[Configuring the BCL Propagator](#configuring-the-bcl-propagator-application-root).
+This is also exactly what the platform itself does: `HttpClient` (SocketsHttpHandler) and ASP.NET Core inject/extract `traceparent`/`tracestate`/ baggage through `DistributedContextPropagator.Current`. A custom transport that uses the same mechanism behaves identically to the built-in ones, and the
+application root keeps control of propagation policy by setting `DistributedContextPropagator.Current` — see [Configuring the BCL Propagator](#configuring-the-bcl-propagator-application-root).
 
 ```csharp
 // ✅ Manual inject for outgoing call — library code, no OTel packages
@@ -432,10 +412,7 @@ Baggage can be extracted with
 
 #### Application-level alternative: OTel `TextMapPropagator`
 
-Use the OTel SDK's `TextMapPropagator` (from `OpenTelemetry.Context.Propagation`)
-**only when the built-in propagator cannot do the job, and only at the application
-root** — never in libraries. The legitimate cases are needing OTel `Baggage.Current`
-or a non-W3C wire format such as B3 (see below):
+Use the OTel SDK's `TextMapPropagator` (from `OpenTelemetry.Context.Propagation`) **only when the built-in propagator cannot do the job, and only at the application root** — never in libraries. The legitimate cases are needing OTel `Baggage.Current` or a non-W3C wire format such as B3 (see below):
 
 ```csharp
 using OpenTelemetry.Context.Propagation;
@@ -448,20 +425,11 @@ propagator.Inject(new PropagationContext(activity.Context, Baggage.Current),
     static (carrier, name, value) => ((Dictionary<string, string>)carrier!)[name] = value!);
 ```
 
-Note that `Sdk.SetDefaultTextMapPropagator` (OTel) and
-`DistributedContextPropagator.Current` (BCL) are separate registries that do not
-know about each other. An application that configures a non-default OTel propagator
-may therefore also need to **bridge** it into `DistributedContextPropagator.Current`
-(a small `DistributedContextPropagator` subclass wrapping the `TextMapPropagator`),
-otherwise `HttpClient`, ASP.NET Core, and BCL-propagating libraries will still
-emit/parse W3C headers. Libraries stay on `DistributedContextPropagator` regardless
-— bridging is an application-root concern.
+Note that `Sdk.SetDefaultTextMapPropagator` (OTel) and `DistributedContextPropagator.Current` (BCL) are separate registries that do not know about each other. An application that configures a non-default OTel propagator may therefore also need to **bridge** it into `DistributedContextPropagator.Current` (a small `DistributedContextPropagator` subclass wrapping the `TextMapPropagator`), otherwise `HttpClient`, ASP.NET Core, and BCL-propagating libraries will still emit/parse W3C headers. Libraries stay on `DistributedContextPropagator` regardless — bridging is an application-root concern.
 
 ### Configuring the BCL Propagator (Application Root)
 
-`DistributedContextPropagator.Current` is a process-wide, settable static. Whatever
-the application root assigns here is what `HttpClient`, ASP.NET Core, and any
-library using the BCL pattern above will use:
+`DistributedContextPropagator.Current` is a process-wide, settable static. Whatever the application root assigns here is what `HttpClient`, ASP.NET Core, and any library using the BCL pattern above will use:
 
 ```csharp
 // Application setup — affects HttpClient, ASP.NET Core, and all BCL-propagating code
@@ -478,8 +446,7 @@ Built-in factories:
 | `CreateNoOutputPropagator()` | Suppresses all outbound propagation — useful at trust boundaries (e.g., calls to third-party APIs that should not see your trace context) |
 | `CreatePassThroughPropagator()` | Forwards the headers received on the inbound request unchanged, using the root `Activity` and ignoring intermediate spans — useful for proxies/gateways |
 
-For a custom wire format, subclass `DistributedContextPropagator` and override its
-four abstract members:
+For a custom wire format, subclass `DistributedContextPropagator` and override its four abstract members:
 
 ```csharp
 public sealed class CustomHeaderPropagator : DistributedContextPropagator
@@ -511,11 +478,7 @@ DistributedContextPropagator.Current = new CustomHeaderPropagator();
 
 ### Custom Propagators (OTel SDK)
 
-Configure OTel propagators **only at the application root, and only when you need
-to deviate from the W3C defaults** — the SDK already ships with the composite of
-`TraceContextPropagator` + `BaggagePropagator`, so restating that buys nothing.
-The example below shows the shape of the call; in practice you would add or replace
-entries (e.g., B3, see below):
+Configure OTel propagators **only at the application root, and only when you need to deviate from the W3C defaults** — the SDK already ships with the composite of `TraceContextPropagator` + `BaggagePropagator`, so restating that buys nothing. The example below shows the shape of the call; in practice you would add or replace entries (e.g., B3, see below):
 
 ```csharp
 // Application setup — only needed when deviating from the W3C defaults
@@ -530,8 +493,7 @@ Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
 ### B3 Propagator (Legacy Compatibility)
 
 If you need to interoperate with systems using the [B3 propagation format](https://github.com/openzipkin/b3-propagation)
-(Zipkin-style), install `OpenTelemetry.Extensions.Propagators` at the application
-root and configure:
+(Zipkin-style), install `OpenTelemetry.Extensions.Propagators` at the application root and configure:
 
 ```csharp
 Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
@@ -543,10 +505,7 @@ Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
     }));
 ```
 
-This changes only the OTel registry — `HttpClient`, ASP.NET Core, and libraries
-using `DistributedContextPropagator` still speak W3C. If B3 must apply to those
-too, bridge the composite into `DistributedContextPropagator.Current` as described
-above.
+This changes only the OTel registry — `HttpClient`, ASP.NET Core, and libraries using  DistributedContextPropagator` still speak W3C. If B3 must apply to those too, bridge the composite into `DistributedContextPropagator.Current` as described above.
 
 ---
 
