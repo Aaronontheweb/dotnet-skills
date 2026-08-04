@@ -608,68 +608,104 @@ public async Task ProcessOrderAsync(Order order)
 
 ## Full Exception Recording Pattern
 
-The modern .NET approach uses `Activity.SetStatus()` as the primary mechanism.
-The OTel SDK translates `ActivityStatusCode` into the proper OTel span status.
+`Activity.SetStatus()` plus the `error.type` tag, governed by [Recording Errors](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/), is the current, non-deprecated way to mark a span as failed. `Activity.AddEvent(new ActivityEvent("exception", ...))`, governed by [`exceptions-spans.md`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/), is **Deprecated** in favor of recording exception details as a log record per [`exceptions-logs.md`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/) — and the same shift applies to non-exception span events, since the spec now models any discrete named occurrence as an Event backed by a `LogRecord`, not a span event, per the [general Events conventions](https://opentelemetry.io/docs/specs/semconv/general/events/). Treat `Activity.AddEvent` as legacy: do not add new callers, whether for exceptions or anything else.
 
-### Basic Pattern
+### Span Status and `error.type` (Current)
 
 ```csharp
 try
 {
-    await ProcessItemAsync();
-    activity?.SetStatus(ActivityStatusCode.Ok);
+    await ProcessItemAsync(); // success: leave status Unset, do not call SetStatus(Ok) — see below
 }
 catch (Exception ex)
 {
     if (activity != null)
     {
-        // Set error status with description
         activity.SetStatus(ActivityStatusCode.Error, ex.Message);
-
-        // Record exception as an event per OTel semantic conventions
-        activity.AddEvent(new ActivityEvent(
-            "exception",
-            tags: new ActivityTagsCollection
-            {
-                ["exception.type"] = ex.GetType().FullName,
-                ["exception.message"] = ex.Message,
-                // exception.stacktrace is Recommended by the span-event convention.
-                // Include it unless size, sensitivity, or volume policy says otherwise.
-                // For high-volume handled exceptions, prefer ILogger with trace correlation.
-                // ["exception.stacktrace"] = ex.ToString()
-            }
-        ));
+        activity.SetTag("error.type", ex.GetType().FullName);
     }
     throw;
 }
 ```
 
-### With Status Code Attributes
+Per `recording-errors.md`: span status **MUST** be left unset if the operation ended without error. On failure, instrumentation **SHOULD** set the status code to `Error`, **SHOULD** set `error.type`, and **SHOULD** set the status description — when failing with an exception, the description **SHOULD** be the exception message. Errors that were retried or handled, letting the operation complete gracefully, **SHOULD NOT** be recorded on spans or metrics — the spec's own worked example is a `createIfNotExists` call that catches `ResourceAlreadyExistsException` internally and returns `false`: that path does not set `Error` status or `error.type`, because from the caller's point of view the operation succeeded.
 
-For HTTP and other protocol handlers, also set the response status as a tag:
+`Ok` is a separate, narrower case governed by the [Set Status API spec](https://opentelemetry.io/docs/specs/otel/trace/api/#set-status), not by `recording-errors.md`: "Instrumentation Libraries SHOULD NOT set the status code to `Ok`, unless explicitly configured to do so... Application developers and Operators may set the status code to `Ok`." So library/instrumentation code should leave status `Unset` on success and never call `SetStatus(Ok)`; `Ok` exists for application-level code that wants to make a final call — most commonly overriding a library-reported `Error` it has decided isn't a real failure, such as suppressing noisy 404s. Once set, `Ok` is final and further status changes are ignored.
+
+### Recording Exception Details as Logs (Current Spec)
+
+Exception details — type, message, stacktrace — belong on a log record correlated to the active span, not on a span event. In .NET, passing the exception instance to `ILogger` gets you both halves of that for free: the OTel .NET Logs SDK reads `Activity.Current` when the `LogRecord` is constructed and stamps `trace_id`/`span_id` from it automatically, and the OTLP log exporter derives `exception.type`, `exception.message`, and `exception.stacktrace` from the exception instance — none of that needs to be set by hand.
 
 ```csharp
-catch (HttpRequestException ex) when (ex.StatusCode != null)
+catch (Exception ex)
 {
-    if (activity != null)
-    {
-        activity.SetStatus(ActivityStatusCode.Error, ex.Message);
-        activity.SetTag("http.response.status_code", (int)ex.StatusCode);
-        activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
-        {
-            ["exception.type"] = ex.GetType().FullName,
-            ["exception.message"] = ex.Message,
-            // Include exception.stacktrace unless size, sensitivity, or volume policy says otherwise
-        }));
-    }
+    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+    activity?.SetTag("error.type", ex.GetType().FullName);
+    logger.LogError(ex, "Item processing failed"); // must be logged while `activity` is still Activity.Current — see below
     throw;
+}
+```
+
+Severity, per `exceptions-logs.md`, reflects expected impact, not just presence: `FATAL` for exceptions that cause application shutdown, `ERROR` for unhandled exceptions (semantic conventions defining `SERVER`/`CONSUMER` spans should recommend this), `WARN` for exceptions expected to be handled by the caller (`CLIENT`/`PRODUCER` spans should recommend this — e.g. a connection timeout, a retry-exhausted client call), `DEBUG` for exceptions that don't indicate an actual issue (the spec's own example: a request cancelled client-side and detected server-side), `INFO`/`TRACE` are available to application developers but semantic conventions should not prescribe them.
+
+The spec's correlation requirement is a MUST, not a SHOULD: "exception events emitted by instrumentations that also record spans for the same operation MUST be associated with the corresponding span context." In .NET that means the log call has to happen before the enclosing `using activity = source.StartActivity(...)` scope ends. This is a real failure mode, not a theoretical one — a nested `try`/`catch` where the outer method's activity scope closes before an inner exception-reporting callback fires will find `Activity.Current` already reverted to the parent (or null) by the time the callback runs, so the exception log silently attaches to the wrong span. Always trace the call path from `catch` to the log call and confirm it stays inside the `using` block.
+
+### Migrating Off Exception Span Events
+
+Existing instrumentation that already emits `AddEvent(new ActivityEvent("exception", ...))` should not drop it in a patch release. The spec's transition guidance: introduce an `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` environment variable supporting `logs` (emit exceptions as logs only), `logs/dup` (emit both span events and logs, for a phased rollout), with the default — absent either value — continuing to emit span events for backward compatibility; maintain that existing major version, with security patches at a minimum, for at least six months after dual-emission starts; then drop the environment variable and the span events in the next major version. As of `OpenTelemetry.Api` 1.17.0, no OpenTelemetry .NET package implements this opt-in yet, and `OpenTelemetry.Instrumentation.AspNetCore` 1.17.0 still records exceptions via `Activity.AddException` (span events) — that's a gap in the .NET ecosystem's catch-up to the spec, not a reason to add new span-event exception recording; new code should go straight to logs as shown above.
+
+### Example: Exception Callback With No Logging Dependency
+
+A library's core often shouldn't take a hard dependency on `Microsoft.Extensions.Logging.Abstractions` or any other logging package — it keeps the core lean, testable, and free to be used by consumers who bring their own logging story. But its exception details still need to reach the Logs API while the right `Activity` is current, and only code outside the core knows where "current" means for that consumer. The fix is the same pattern used for context propagation hooks in messaging clients: a settable delegate that the core invokes synchronously, in place, right where the exception is caught.
+
+```csharp
+// Core library — references only System.Diagnostics.DiagnosticSource. No Microsoft.Extensions.Logging.Abstractions, no OpenTelemetry package.
+public static class MyLibraryDiagnostics
+{
+    public static Action<Exception, string>? ExceptionCallback { get; set; } // an OTel integration package (or the application itself) sets this
+}
+
+internal sealed class Consumer
+{
+    private static readonly ActivitySource Source = new("MyLibrary");
+
+    public async Task DeliverAsync(Message message)
+    {
+        using var activity = Source.StartActivity("deliver", ActivityKind.Consumer);
+        try
+        {
+            await ProcessAsync(message); // success: leave status Unset — this is library code, so no SetStatus(Ok)
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.SetTag("error.type", ex.GetType().FullName);
+            MyLibraryDiagnostics.ExceptionCallback?.Invoke(ex, "deliver"); // synchronous, inline, still inside the `using` scope — Activity.Current is this "deliver" span right now; deferring this call (Task.Run, a queue drained later) would let Activity.Current revert before it runs
+            throw;
+        }
+    }
+}
+```
+
+```csharp
+// MyLibrary.OpenTelemetry — the only assembly in the stack that references Microsoft.Extensions.Logging.Abstractions.
+public static void AddMyLibraryInstrumentation(this IServiceCollection services)
+{
+    services.AddSingleton<IStartupFilter>(_ =>
+    {
+        var logger = services.BuildServiceProvider().GetRequiredService<ILoggerFactory>().CreateLogger("MyLibrary");
+        MyLibraryDiagnostics.ExceptionCallback = (exception, operationName) =>
+        {
+            logger.LogError(exception, "{Operation} failed", operationName); // Activity.Current is still the "deliver" span the core had open when it invoked us — the OTel Logs SDK reads it here to stamp trace_id/span_id, satisfying the exceptions-logs.md MUST
+        };
+        return new NoopStartupFilter();
+    });
 }
 ```
 
 ### Legacy Compatibility
 
-The manual `otel.status_code` and `otel.status_description` **tags** were required
-in early OTel .NET versions before `Activity.SetStatus()` was available:
+The manual `otel.status_code` and `otel.status_description` **tags** were required in early OTel .NET versions before `Activity.SetStatus()` was available:
 
 ```csharp
 // ❌ LEGACY — no longer needed, prefer SetStatus
@@ -677,19 +713,18 @@ activity.SetTag("otel.status_code", "error");
 activity.SetTag("otel.status_description", ex.Message);
 ```
 
-Do NOT use these tags in new code. `Activity.SetStatus()` is the modern API and the
-OTel SDK handles translation to the OTel span status fields automatically.
+Do NOT use these tags in new code. `Activity.SetStatus()` is the modern API and the OTel SDK handles translation to the OTel span status fields automatically.
 
-### Exception Event Attribute Reference
+### Exception Attribute Reference
 
-Per the [OTel exception span conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/):
+`exceptions-spans.md` is **Deprecated**; `exceptions-logs.md` is the current document, and both share the same first three attributes. `exception.escaped` is deprecated outright, not just deprioritized — "it's no longer recommended to record exceptions that are handled and do not escape the scope of a span" — and has no equivalent in the logs convention.
 
-| Attribute | Required | Description |
-|-----------|----------|-------------|
-| `exception.type` | Yes (if available) | Fully qualified exception type name |
-| `exception.message` | Yes (if available) | The exception message |
-| `exception.stacktrace` | Recommended | String representation of the stack trace |
-| `exception.escaped` | Optional | `true` if the exception escaped the span boundary |
+| Attribute | Stability | Requirement | Description |
+|-----------|-----------|-------------|-------------|
+| `exception.type` | Stable | Conditionally Required (if `exception.message` not set) | Fully qualified exception type name |
+| `exception.message` | Stable | Conditionally Required (if `exception.type` not set) | The exception message |
+| `exception.stacktrace` | Stable | Recommended | String representation of the stack trace |
+| `exception.escaped` | **Deprecated** | Span events only, not recommended | Whether the exception escaped the span boundary — don't set this |
 
 ---
 
@@ -704,5 +739,8 @@ Per the [OTel exception span conventions](https://opentelemetry.io/docs/specs/se
 - [W3C Baggage](https://www.w3.org/TR/baggage/)
 - [OTel .NET: Creating Links Between Traces](https://opentelemetry.io/docs/languages/dotnet/traces/links-creation/)
 - [OTel .NET: Reporting Exceptions](https://opentelemetry.io/docs/languages/dotnet/traces/reporting-exceptions/)
-- [OTel Exception Span Conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/)
+- [OTel Recording Errors](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/)
+- [OTel Exception Span Conventions (Deprecated)](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/)
+- [OTel Exception Logs Conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/)
+- [OTel General Events Conventions](https://opentelemetry.io/docs/specs/semconv/general/events/)
 - [.NET Distributed Tracing Documentation](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/distributed-tracing)

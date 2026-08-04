@@ -216,42 +216,53 @@ activity?.SetTag("myapp.order-id", orderId);    // ❌ Wrong delimiter
 ```csharp
 try
 {
-    await ProcessItemAsync();
-    activity?.SetStatus(ActivityStatusCode.Ok);
+    await ProcessItemAsync(); // ✅ success: leave status Unset, do not call SetStatus(Ok) — see rules below
 }
 catch (Exception ex)
 {
     if (activity != null)
     {
         activity.SetStatus(ActivityStatusCode.Error, ex.Message); // modern API
-        activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
-        {
-            ["exception.type"] = ex.GetType().FullName,
-            ["exception.message"] = ex.Message,
-            // Include unless size/sensitivity/volume policy says otherwise.
-            // ["exception.stacktrace"] = ex.ToString() // Recommended
-        }));
+        activity.SetTag("error.type", ex.GetType().FullName);
     }
     throw;
 }
 ```
 
-**Rules**:
-- Set `ActivityStatusCode.Ok` on success, `ActivityStatusCode.Error` on exception
-- Use `SetStatus` (the SDK translates it to OTel span status) — legacy `otel.status_code`/`otel.status_description` tags are no longer needed
-- Record exception events per [OTel exception span conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/)
-- `exception.stacktrace` is **Recommended** for exception span events. Include it unless size, sensitivity, or volume policy says otherwise. For high-volume handled exceptions, prefer `ILogger` with trace correlation or the semconv logs opt-in (`OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN`).
+**Rules** (per [Recording Errors](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/) and the [Set Status API spec](https://opentelemetry.io/docs/specs/otel/trace/api/#set-status)):
+- Leave span status **Unset** on success — do not call `SetStatus(ActivityStatusCode.Ok)`.
+- `Ok` is for application code, not instrumentation libraries. The trace API spec: "Instrumentation Libraries SHOULD NOT set the status code to `Ok`, unless explicitly configured to do so (...) Application developers and Operators may set the status code to `Ok`" — typically to override a library-reported `Error` they've decided isn't a real failure (e.g. suppressing a noisy 404). Once set, `Ok` is final; later calls are ignored."
+- On failure: **SHOULD** set `ActivityStatusCode.Error`, **SHOULD** set the `error.type` tag, **SHOULD** set the status description to the exception message.
+- Use `SetStatus` — legacy `otel.status_code`/`otel.status_description` tags are no longer needed.
+- Do **not** record errors that were retried or handled and let the operation complete gracefully — `Error` status and `error.type` describe operations that failed, not ones that recovered.
 
-### Activity Events
+### Recording Exceptions and Events — Use Logs, Not `Activity.AddEvent`
+
+`Activity.AddEvent(new ActivityEvent(...))` is a legacy mechanism and should not be used in new code, whether for exceptions or for ad-hoc named occurrences. Recording exceptions as span events implements [`exceptions-spans`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/), whose status is **Deprecated** in favor of [`exceptions-logs`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/), and more broadly the spec now models any discrete, named, point-in-time occurrence as an **Event** — defined as a `LogRecord` with an event name, per the [general Events conventions](https://opentelemetry.io/docs/specs/semconv/general/events/) — not as a span event. Emit through the Logs API instead, while the span is still current:
 
 ```csharp
-// ✅ Use events sparingly — stored in-memory until export
-activity?.AddEvent(new ActivityEvent("ItemRetried", tags: new ActivityTagsCollection
+try
 {
-    ["retry_attempt"] = retryCount
-}));
-// ❌ Don't use events for verbose logging — use ILogger instead
+    await ProcessItemAsync();
+}
+catch (Exception ex)
+{
+    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+    activity?.SetTag("error.type", ex.GetType().FullName);
+    logger.LogError(ex, "Item processing failed"); // ✅ pass the exception instance while `activity` is still Activity.Current — the SDK derives trace_id/span_id and exception.type/message/stacktrace from it, no manual tagging needed
+    throw;
+}
+
+// Non-exception named occurrence — a named EventId, not AddEvent:
+logger.LogInformation(new EventId(1, "ItemRetried"), "Retrying item {RetryAttempt}", retryCount);
 ```
+
+**Rules**:
+- Don't set `exception.escaped` — it's deprecated outright: "no longer recommended to record exceptions that are handled and do not escape the scope of a span."
+- Pick severity per `exceptions-logs`: `ERROR` for unhandled exceptions (especially on `SERVER`/`CONSUMER` spans), `WARN` for exceptions expected to be handled by the caller (especially on `CLIENT`/`PRODUCER` spans), `DEBUG` for exceptions that don't indicate an actual issue (e.g., a request cancelled client-side), `FATAL` only when the exception causes application shutdown.
+- The log call **MUST** happen while the span it's associated with is still current — the spec requires "exception events emitted by instrumentations that also record spans for the same operation MUST be associated with the corresponding span context." Logging from a detached error-reporting callback after the `using` activity scope has ended silently correlates to the wrong span, or none. See [Accessing Activities](#accessing-activities) below.
+
+**Migrating an existing library that already emits exception span events**: don't rip them out in a patch release. Introduce `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` (`logs` / `logs/dup`, default = keep emitting span events for compatibility), maintain that dual-emission behavior for at least six months, then drop span events in your next major version — this is the spec's own transition guidance, not an optional nicety. See [traces-and-propagation-reference](traces-and-propagation-reference.md) for the full migration pattern, including how a library with no logging dependency in its core can still expose a callback so a separate OTel integration package can capture exception details while the right span is active.
 
 ### Accessing Activities
 
