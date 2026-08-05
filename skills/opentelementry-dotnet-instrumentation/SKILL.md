@@ -236,11 +236,16 @@ catch (Exception ex)
 - Use `SetStatus` — legacy `otel.status_code`/`otel.status_description` tags are no longer needed.
 - Do **not** record errors that were retried or handled and let the operation complete gracefully — `Error` status and `error.type` describe operations that failed, not ones that recovered.
 
-### Recording Exceptions and Events — Use Logs, Not `Activity.AddEvent`
+### Recording Exceptions — Keep Emitting Span Events, Add the Logs Opt-In
 
-`Activity.AddEvent(new ActivityEvent(...))` is a legacy mechanism and should not be used in new code, whether for exceptions or for ad-hoc named occurrences. Recording exceptions as span events implements [`exceptions-spans`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/), whose status is **Deprecated** in favor of [`exceptions-logs`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/), and more broadly the spec now models any discrete, named, point-in-time occurrence as an **Event** — defined as a `LogRecord` with an event name, per the [general Events conventions](https://opentelemetry.io/docs/specs/semconv/general/events/) — not as a span event. Emit through the Logs API instead, while the span is still current:
+`exceptions-spans` — the convention behind `Activity.AddEvent(new ActivityEvent("exception", ...))` — carries a **Deprecated** status in favor of `exceptions-logs`, but the .NET ecosystem has not followed yet: no `OpenTelemetry.*` .NET package implements the spec's `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` opt-in (verified against `OpenTelemetry.Api` 1.17.0), and `OpenTelemetry.Instrumentation.AspNetCore` 1.17.0 itself still records exceptions via `Activity.AddException`, i.e. span events. That means the exporters, backends, and dashboards a typical .NET user has wired up today are built to read exception span events, not log-based exceptions. **Keep implementing span events as the default** — dropping them because the underlying spec document is marked Deprecated will silently break exception visibility for anyone still on today's tooling. Layer the newer logs-based path on top as an opt-in, exactly as the spec's own transition guidance describes for instrumentations moving off span events:
 
 ```csharp
+// Mirrors the spec's OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN values: unset/anything else → spans only (today's default), "logs/dup" → both, "logs" → logs only.
+private static readonly string? ExceptionSignalOptIn = Environment.GetEnvironmentVariable("OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN");
+private static readonly bool EmitSpanEvents = ExceptionSignalOptIn != "logs";
+private static readonly bool EmitLogs = ExceptionSignalOptIn is "logs" or "logs/dup";
+
 try
 {
     await ProcessItemAsync();
@@ -249,20 +254,34 @@ catch (Exception ex)
 {
     activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
     activity?.SetTag("error.type", ex.GetType().FullName);
-    logger.LogError(ex, "Item processing failed"); // ✅ pass the exception instance while `activity` is still Activity.Current — the SDK derives trace_id/span_id and exception.type/message/stacktrace from it, no manual tagging needed
+
+    if (EmitSpanEvents) // ✅ default — what current .NET tooling and dashboards actually consume today
+    {
+        activity?.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
+        {
+            ["exception.type"] = ex.GetType().FullName,
+            ["exception.message"] = ex.Message,
+            ["exception.stacktrace"] = ex.ToString()
+        }));
+    }
+
+    if (EmitLogs) // opt-in — the spec's forward direction; pass the exception instance while `activity` is still Activity.Current so the SDK derives trace_id/span_id and exception.type/message/stacktrace from it
+    {
+        logger.LogError(ex, "Item processing failed");
+    }
+
     throw;
 }
-
-// Non-exception named occurrence — a named EventId, not AddEvent:
-logger.LogInformation(new EventId(1, "ItemRetried"), "Retrying item {RetryAttempt}", retryCount);
 ```
 
 **Rules**:
-- Don't set `exception.escaped` — it's deprecated outright: "no longer recommended to record exceptions that are handled and do not escape the scope of a span."
-- Pick severity per `exceptions-logs`: `ERROR` for unhandled exceptions (especially on `SERVER`/`CONSUMER` spans), `WARN` for exceptions expected to be handled by the caller (especially on `CLIENT`/`PRODUCER` spans), `DEBUG` for exceptions that don't indicate an actual issue (e.g., a request cancelled client-side), `FATAL` only when the exception causes application shutdown.
+- Don't set `exception.escaped` on the span event — it's deprecated outright: "no longer recommended to record exceptions that are handled and do not escape the scope of a span."
+- Support `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` (`logs` / `logs/dup`) so consumers who are ready can opt into logs or dual-emission, but default to spans-only — this is the spec's own transition guidance, not an optional nicety, and it exists precisely so nobody has to choose one signal over the other before they're ready.
+- When emitting logs (opt-in or dual), pick severity per `exceptions-logs`: `ERROR` for unhandled exceptions (especially on `SERVER`/`CONSUMER` spans), `WARN` for exceptions expected to be handled by the caller (especially on `CLIENT`/`PRODUCER` spans), `DEBUG` for exceptions that don't indicate an actual issue (e.g., a request cancelled client-side), `FATAL` only when the exception causes application shutdown.
 - The log call **MUST** happen while the span it's associated with is still current — the spec requires "exception events emitted by instrumentations that also record spans for the same operation MUST be associated with the corresponding span context." Logging from a detached error-reporting callback after the `using` activity scope has ended silently correlates to the wrong span, or none. See [Accessing Activities](#accessing-activities) below.
+- Only move to `logs`-only once you've held dual-emission for at least six months on a stable major version (the spec's own minimum) **and** confirmed your actual consumers read log-based exceptions — not on a fixed timeline alone.
 
-**Migrating an existing library that already emits exception span events**: don't rip them out in a patch release. Introduce `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` (`logs` / `logs/dup`, default = keep emitting span events for compatibility), maintain that dual-emission behavior for at least six months, then drop span events in your next major version — this is the spec's own transition guidance, not an optional nicety. See [traces-and-propagation-reference](traces-and-propagation-reference.md) for the full migration pattern, including how a library with no logging dependency in its core can still expose a callback so a separate OTel integration package can capture exception details while the right span is active.
+See [traces-and-propagation-reference](traces-and-propagation-reference.md) for the full pattern, including how a library with no logging dependency in its core can still expose a callback so a separate OTel integration package can capture exception details while the right span is active.
 
 ### Accessing Activities
 

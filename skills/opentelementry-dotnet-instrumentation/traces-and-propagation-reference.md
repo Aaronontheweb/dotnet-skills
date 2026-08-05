@@ -608,7 +608,7 @@ public async Task ProcessOrderAsync(Order order)
 
 ## Full Exception Recording Pattern
 
-`Activity.SetStatus()` plus the `error.type` tag, governed by [Recording Errors](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/), is the current, non-deprecated way to mark a span as failed. `Activity.AddEvent(new ActivityEvent("exception", ...))`, governed by [`exceptions-spans.md`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/), is **Deprecated** in favor of recording exception details as a log record per [`exceptions-logs.md`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/) — and the same shift applies to non-exception span events, since the spec now models any discrete named occurrence as an Event backed by a `LogRecord`, not a span event, per the [general Events conventions](https://opentelemetry.io/docs/specs/semconv/general/events/). Treat `Activity.AddEvent` as legacy: do not add new callers, whether for exceptions or anything else.
+`Activity.SetStatus()` plus the `error.type` tag, governed by [Recording Errors](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/), is the current, non-deprecated way to mark a span as failed — implement it unconditionally. `Activity.AddEvent(new ActivityEvent("exception", ...))`, governed by [`exceptions-spans.md`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/), carries a **Deprecated** status in favor of recording exception details as a log record per [`exceptions-logs.md`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/) — but the .NET ecosystem has not moved with it: no `OpenTelemetry.*` .NET package implements the spec's own `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` opt-in (verified against `OpenTelemetry.Api` 1.17.0), and `OpenTelemetry.Instrumentation.AspNetCore` 1.17.0 itself still records exceptions via `Activity.AddException` — span events. Concretely: today's exporters, backends, and trace UIs are built to read exception span events, and dropping them because the spec document is marked Deprecated will silently break exception visibility for every consumer still on that tooling. **Keep implementing exception span events as the default.** Treat the logs-based path as an opt-in layered on top, exactly as the spec's own transition guidance describes — see below.
 
 ### Span Status and `error.type` (Current)
 
@@ -632,42 +632,66 @@ Per `recording-errors.md`: span status **MUST** be left unset if the operation e
 
 `Ok` is a separate, narrower case governed by the [Set Status API spec](https://opentelemetry.io/docs/specs/otel/trace/api/#set-status), not by `recording-errors.md`: "Instrumentation Libraries SHOULD NOT set the status code to `Ok`, unless explicitly configured to do so... Application developers and Operators may set the status code to `Ok`." So library/instrumentation code should leave status `Unset` on success and never call `SetStatus(Ok)`; `Ok` exists for application-level code that wants to make a final call — most commonly overriding a library-reported `Error` it has decided isn't a real failure, such as suppressing noisy 404s. Once set, `Ok` is final and further status changes are ignored.
 
-### Recording Exception Details as Logs (Current Spec)
+### Span Events Today, Logs as an Opt-In
 
-Exception details — type, message, stacktrace — belong on a log record correlated to the active span, not on a span event. In .NET, passing the exception instance to `ILogger` gets you both halves of that for free: the OTel .NET Logs SDK reads `Activity.Current` when the `LogRecord` is constructed and stamps `trace_id`/`span_id` from it automatically, and the OTLP log exporter derives `exception.type`, `exception.message`, and `exception.stacktrace` from the exception instance — none of that needs to be set by hand.
+Implement both, gated by the same `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` environment variable the spec defines for instrumentations transitioning off span events: `logs` (logs only), `logs/dup` (both, for a phased rollout), and — absent either value — the default stays span events only, matching what current .NET tooling consumes:
 
 ```csharp
+// Mirrors OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN: unset/anything else → spans only (today's default), "logs/dup" → both, "logs" → logs only.
+private static readonly string? ExceptionSignalOptIn = Environment.GetEnvironmentVariable("OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN");
+private static readonly bool EmitSpanEvents = ExceptionSignalOptIn != "logs";
+private static readonly bool EmitLogs = ExceptionSignalOptIn is "logs" or "logs/dup";
+
 catch (Exception ex)
 {
     activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
     activity?.SetTag("error.type", ex.GetType().FullName);
-    logger.LogError(ex, "Item processing failed"); // must be logged while `activity` is still Activity.Current — see below
+
+    if (EmitSpanEvents) // ✅ default — what current .NET exporters, backends, and trace UIs actually consume
+    {
+        activity?.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
+        {
+            ["exception.type"] = ex.GetType().FullName,
+            ["exception.message"] = ex.Message,
+            ["exception.stacktrace"] = ex.ToString()
+        }));
+    }
+
+    if (EmitLogs) // opt-in — the spec's forward direction; must be logged while `activity` is still Activity.Current, see below
+    {
+        logger.LogError(ex, "Item processing failed");
+    }
+
     throw;
 }
 ```
 
+Passing the exception instance to `ILogger` gets trace correlation and attribute mapping for free: the OTel .NET Logs SDK reads `Activity.Current` when the `LogRecord` is constructed and stamps `trace_id`/`span_id` from it automatically, and the OTLP log exporter derives `exception.type`, `exception.message`, and `exception.stacktrace` from the exception instance — none of that needs to be set by hand, and don't set `exception.escaped` on the span event either, since it's deprecated outright.
+
 Severity, per `exceptions-logs.md`, reflects expected impact, not just presence: `FATAL` for exceptions that cause application shutdown, `ERROR` for unhandled exceptions (semantic conventions defining `SERVER`/`CONSUMER` spans should recommend this), `WARN` for exceptions expected to be handled by the caller (`CLIENT`/`PRODUCER` spans should recommend this — e.g. a connection timeout, a retry-exhausted client call), `DEBUG` for exceptions that don't indicate an actual issue (the spec's own example: a request cancelled client-side and detected server-side), `INFO`/`TRACE` are available to application developers but semantic conventions should not prescribe them.
 
-The spec's correlation requirement is a MUST, not a SHOULD: "exception events emitted by instrumentations that also record spans for the same operation MUST be associated with the corresponding span context." In .NET that means the log call has to happen before the enclosing `using activity = source.StartActivity(...)` scope ends. This is a real failure mode, not a theoretical one — a nested `try`/`catch` where the outer method's activity scope closes before an inner exception-reporting callback fires will find `Activity.Current` already reverted to the parent (or null) by the time the callback runs, so the exception log silently attaches to the wrong span. Always trace the call path from `catch` to the log call and confirm it stays inside the `using` block.
+The spec's correlation requirement is a MUST, not a SHOULD, and it applies to both signals: "exception events emitted by instrumentations that also record spans for the same operation MUST be associated with the corresponding span context." In .NET that means both the `AddEvent` call and the log call have to happen before the enclosing `using activity = source.StartActivity(...)` scope ends. This is a real failure mode, not a theoretical one — a nested `try`/`catch` where the outer method's activity scope closes before an inner exception-reporting callback fires will find `Activity.Current` already reverted to the parent (or null) by the time the callback runs, so the exception record silently attaches to the wrong span. Always trace the call path from `catch` to wherever the exception is actually recorded and confirm it stays inside the `using` block.
 
-### Migrating Off Exception Span Events
-
-Existing instrumentation that already emits `AddEvent(new ActivityEvent("exception", ...))` should not drop it in a patch release. The spec's transition guidance: introduce an `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` environment variable supporting `logs` (emit exceptions as logs only), `logs/dup` (emit both span events and logs, for a phased rollout), with the default — absent either value — continuing to emit span events for backward compatibility; maintain that existing major version, with security patches at a minimum, for at least six months after dual-emission starts; then drop the environment variable and the span events in the next major version. As of `OpenTelemetry.Api` 1.17.0, no OpenTelemetry .NET package implements this opt-in yet, and `OpenTelemetry.Instrumentation.AspNetCore` 1.17.0 still records exceptions via `Activity.AddException` (span events) — that's a gap in the .NET ecosystem's catch-up to the spec, not a reason to add new span-event exception recording; new code should go straight to logs as shown above.
+Don't drop span events in a patch release, and don't drop them on a fixed timeline either. The spec's own minimum is holding dual-emission (`logs/dup`) for at least six months on a stable major version, with security patches at a minimum, before dropping the environment variable and the span events in the next major version — but treat that as a floor, not a target: only move to `logs`-only once you've confirmed your actual consumers read log-based exceptions, which for most .NET users today they don't yet.
 
 ### Example: Exception Callback With No Logging Dependency
 
-A library's core often shouldn't take a hard dependency on `Microsoft.Extensions.Logging.Abstractions` or any other logging package — it keeps the core lean, testable, and free to be used by consumers who bring their own logging story. But its exception details still need to reach the Logs API while the right `Activity` is current, and only code outside the core knows where "current" means for that consumer. The fix is the same pattern used for context propagation hooks in messaging clients: a settable delegate that the core invokes synchronously, in place, right where the exception is caught.
+A library's core can emit the exception span event itself — that only needs `System.Diagnostics.DiagnosticSource`, already a given. What it usually can't do is also take a hard dependency on `Microsoft.Extensions.Logging.Abstractions` or any other logging package just to support the logs opt-in — that would force a logging dependency onto every consumer, including the ones staying on spans-only. The fix is the same pattern used for context propagation hooks in messaging clients: a settable delegate that the core invokes synchronously, in place, right where the exception is caught. The `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` flag check belongs entirely inside the core — the consumer registering the callback shouldn't have to know the flag exists at all; they just register a callback and log through whatever abstraction they already use.
 
 ```csharp
 // Core library — references only System.Diagnostics.DiagnosticSource. No Microsoft.Extensions.Logging.Abstractions, no OpenTelemetry package.
 public static class MyLibraryDiagnostics
 {
-    public static Action<Exception, string>? ExceptionCallback { get; set; } // an OTel integration package (or the application itself) sets this
+    public static Action<Exception, string>? ExceptionCallback { get; set; } // a consumer registers this; the core alone decides when to invoke it
 }
 
 internal sealed class Consumer
 {
     private static readonly ActivitySource Source = new("MyLibrary");
+    // Mirrors OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN: unset/anything else → spans only (today's default), "logs/dup" → both, "logs" → logs only.
+    private static readonly string? ExceptionSignalOptIn = Environment.GetEnvironmentVariable("OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN");
+    private static readonly bool EmitSpanEvents = ExceptionSignalOptIn != "logs";
+    private static readonly bool EmitLogs = ExceptionSignalOptIn is "logs" or "logs/dup";
 
     public async Task DeliverAsync(Message message)
     {
@@ -680,7 +704,14 @@ internal sealed class Consumer
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             activity?.SetTag("error.type", ex.GetType().FullName);
-            MyLibraryDiagnostics.ExceptionCallback?.Invoke(ex, "deliver"); // synchronous, inline, still inside the `using` scope — Activity.Current is this "deliver" span right now; deferring this call (Task.Run, a queue drained later) would let Activity.Current revert before it runs
+
+            if (EmitSpanEvents) // ✅ default — what current .NET exporters, backends, and trace UIs actually consume
+            {
+                activity?.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection { ["exception.type"] = ex.GetType().FullName, ["exception.message"] = ex.Message, ["exception.stacktrace"] = ex.ToString() }));
+            }
+
+            MyLibraryDiagnostics.ExceptionCallback?.Invoke(ex, "deliver"); // deferring this call (Task.Run, a queue drained later) would let Activity.Current revert before it runs
+
             throw;
         }
     }
@@ -688,19 +719,12 @@ internal sealed class Consumer
 ```
 
 ```csharp
-// MyLibrary.OpenTelemetry — the only assembly in the stack that references Microsoft.Extensions.Logging.Abstractions.
-public static void AddMyLibraryInstrumentation(this IServiceCollection services)
+// Consumer code, registered once at startup — no OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN check here; the library already decided whether this callback gets invoked at all.
+MyLibraryDiagnostics.ExceptionCallback = (exception, operationName) =>
 {
-    services.AddSingleton<IStartupFilter>(_ =>
-    {
-        var logger = services.BuildServiceProvider().GetRequiredService<ILoggerFactory>().CreateLogger("MyLibrary");
-        MyLibraryDiagnostics.ExceptionCallback = (exception, operationName) =>
-        {
-            logger.LogError(exception, "{Operation} failed", operationName); // Activity.Current is still the "deliver" span the core had open when it invoked us — the OTel Logs SDK reads it here to stamp trace_id/span_id, satisfying the exceptions-logs.md MUST
-        };
-        return new NoopStartupFilter();
-    });
-}
+    // Log via whatever abstraction you already use — ILogger, Serilog, NLog, etc. Activity.Current is still the "deliver" span the core had open when it invoked this callback, so a sink that reads Activity.Current (as the OTel .NET Logs SDK does for ILogger) correlates trace_id/span_id automatically.
+    logger.LogError(exception, "{Operation} failed", operationName);
+};
 ```
 
 ### Legacy Compatibility
