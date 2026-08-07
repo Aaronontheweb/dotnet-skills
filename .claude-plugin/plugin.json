@@ -20,6 +20,7 @@
     "./skills/mjml-email-templates",
     "./skills/csharp-coding-standards",
     "./skills/csharp-concurrency-patterns",
+    "./skills/csharp-nullable-reference-types",
     "./skills/csharp-api-design",
     "./skills/csharp-type-design-performance",
     "./skills/r3-reactive-extensions",
