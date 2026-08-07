@@ -52,6 +52,11 @@ jobs:
             echo "OK: $file"
           done
 
+      - name: Validate Codex plugin
+        run: |
+          echo "Validating Codex plugin manifest and marketplace..."
+          bash ./scripts/validate-codex-plugin.sh
+
       - name: Validate YAML frontmatter
         run: |
           echo "Checking YAML frontmatter in skills..."
@@ -163,11 +168,15 @@ jobs:
           ## Installation
 
           ```bash
-          # Add the marketplace
+          # Claude Code - add the marketplace
           /plugin marketplace add Aaronontheweb/dotnet-skills
-
-          # Install the plugin (includes all skills and agents)
           /plugin install dotnet-skills
+          ```
+
+          ```bash
+          # Codex - add the marketplace, then install the plugin
+          codex plugin marketplace add Aaronontheweb/dotnet-skills
+          codex plugin add dotnet-skills@dotnet-skills
           ```
           INSTALL
 

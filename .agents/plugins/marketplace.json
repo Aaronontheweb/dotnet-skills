@@ -1,0 +1,20 @@
+{
+  "name": "dotnet-skills",
+  "interface": {
+    "displayName": ".NET Skills"
+  },
+  "plugins": [
+    {
+      "name": "dotnet-skills",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

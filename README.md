@@ -1,6 +1,6 @@
-# .NET Skills for Claude Code
+# .NET Skills for Claude Code and Codex
 
-A comprehensive Claude Code plugin with **30 skills** and **5 specialized agents** for professional .NET development. Battle-tested patterns from production systems covering C#, Akka.NET, Aspire, EF Core, testing, and performance optimization.
+A comprehensive AI coding plugin with **30 skills** and **5 specialized agents** for professional .NET development. Battle-tested patterns from production systems covering C#, Akka.NET, Aspire, EF Core, testing, and performance optimization.
 
 ## Installation
 
@@ -21,6 +21,24 @@ To update:
 ```
 /plugin marketplace update
 ```
+
+### Codex (OpenAI)
+
+[Official Docs](https://developers.openai.com/codex/plugins)
+
+Add the marketplace, then install the plugin:
+
+```bash
+codex plugin marketplace add Aaronontheweb/dotnet-skills
+codex plugin add dotnet-skills@dotnet-skills
+```
+
+Verify the install:
+```bash
+codex plugin list
+```
+
+Skills are auto-discovered from the plugin's `skills/` directory. Invoke one with `/skills` or `$skill-name` in the Codex CLI or IDE extension. Note: the specialized agents are Claude Code-specific and are not included in the Codex plugin.
 
 ### GitHub Copilot
 
@@ -235,8 +253,14 @@ These skills emphasize patterns that work in production:
 ```
 dotnet-skills/
 ├── .claude-plugin/
-│   └── plugin.json         # Plugin manifest
-├── agents/                 # 5 specialized agents
+│   ├── plugin.json         # Claude Code plugin manifest
+│   └── marketplace.json    # Claude Code marketplace
+├── .codex-plugin/
+│   └── plugin.json         # Codex plugin manifest
+├── .agents/
+│   └── plugins/
+│       └── marketplace.json  # Codex marketplace
+├── agents/                 # 5 specialized agents (Claude Code)
 │   ├── akka-net-specialist.md
 │   ├── docfx-specialist.md
 │   ├── dotnet-benchmark-designer.md
@@ -260,8 +284,9 @@ dotnet-skills/
 Want to add a skill or agent? PRs welcome!
 
 1. Create `skills/<skill-name>/SKILL.md` (use prefixes like `akka-`, `aspire-`, `csharp-` for category)
-2. Add the path to `.claude-plugin/plugin.json`
-3. Submit a PR
+2. Add the path to `.claude-plugin/plugin.json` (the Codex plugin auto-discovers the whole `skills/` dir)
+3. Run `./scripts/validate-marketplace.sh` and `./scripts/validate-codex-plugin.sh`
+4. Submit a PR
 
 Skills should be comprehensive reference documents (10-40KB) with concrete examples and anti-patterns.
 
