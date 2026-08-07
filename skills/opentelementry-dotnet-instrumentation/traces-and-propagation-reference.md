@@ -25,11 +25,23 @@ to other spans. It describes two independent properties:
 
 1. Whether a span represents an **outgoing call** (`Client`/`Producer`) or
    **incoming request processing** (`Server`/`Consumer`)
-2. Whether a span is a **request/response** (`Client`/`Server`) or
-   **deferred execution** (`Producer`/`Consumer`)
+2. Whether the communication is **synchronous** — the caller awaits a response
+   (`Client`/`Server`, request/response) — or **asynchronous** — the initiator
+   hands off work and does not wait for the outcome (`Producer`/`Consumer`,
+   deferred execution)
+
+| ActivityKind | Call direction | Communication style              |
+|--------------|----------------|----------------------------------|
+| `Client`     | outgoing       | synchronous (request/response)   |
+| `Server`     | incoming       | synchronous (request/response)   |
+| `Producer`   | outgoing       | asynchronous (deferred execution)|
+| `Consumer`   | incoming       | asynchronous (deferred execution)|
+| `Internal`   | — (in-process) | —                                |
 
 A single span SHOULD NOT serve more than one purpose. If you need to describe both
-an incoming request and an outgoing call, create separate spans.
+an incoming request and an outgoing call, create separate spans — e.g., a `Server`
+span handling a request SHOULD NOT also describe an outgoing call it makes; that
+call is its own `Client` (or `Producer`) child span.
 
 ### Internal (Default)
 
@@ -52,7 +64,8 @@ Processing an incoming remote request.
 // HTTP server handler
 using var activity = ActivitySource.StartActivity("HandleRequest", ActivityKind.Server);
 activity?.SetTag("http.request.method", "GET");
-activity?.SetTag("url.full", requestUrl);
+activity?.SetTag("url.path", "/orders");
+activity?.SetTag("url.scheme", "https");
 activity?.SetTag("server.address", "myapp.example.com");
 activity?.SetTag("server.port", 8080);
 ```
@@ -76,8 +89,10 @@ activity?.SetTag("url.full", "https://api.example.com/orders");
 activity?.SetTag("server.address", "api.example.com");
 ```
 
-**Use when**: your code is the client side of a client/server interaction —
-HTTP client call, database query, RPC invocation.
+**Use when**: your code makes any **synchronous** outgoing remote call — one where
+it awaits the response — HTTP client call, database query, cache lookup, RPC
+invocation. `Client` is not limited to RPC: a SQL query or Redis `GET` is a
+`Client` span because the caller blocks for the result.
 
 **Key**: the OTel SDK's HttpClient instrumentation automatically creates `Client`
 spans for outgoing HTTP calls. Only create your own `Client` span for custom
@@ -104,7 +119,7 @@ activity?.SetTag("messaging.operation.name", "publish");
 **Use when**: your code enqueues or publishes deferred work that will be processed
 asynchronously later — message queue publish, event bus emit, job enqueue.
 
-The key difference from `Client`: a `Client` span expects a response (request/response),
+The key difference from `Client`: a `Client` span awaits a response (request/response),
 while a `Producer` span represents handing work to another component for later processing.
 The context is propagated so the downstream `Consumer` span can link back.
 
@@ -124,8 +139,15 @@ activity?.SetTag("messaging.operation.name", "receive");
 previously produced by a `Producer` span — message queue consume, background job
 processing, event handler, job dequeue.
 
-The `Consumer` span's parent is typically the `Producer` span (propagated via context),
-creating a causal link across the asynchronous boundary.
+The `Consumer` span's parent is typically the `Producer` span (the propagated
+message creation context), creating a causal link across the asynchronous boundary.
+Note that per the
+[messaging semantic conventions](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/),
+only the `process` operation is kind `Consumer` — a pull-based `receive` is kind
+`Client`, because pulling from the broker is a synchronous request/response with
+the broker. The semconv also supports parenting the `process` span under the local
+ambient context with a span link back to the producer — see
+[Messaging Consumer Parenting Example](#messaging-consumer-parenting-example).
 
 ### SpanKind Decision Flowchart
 
@@ -155,9 +177,11 @@ different traces.
 - **Batch processing**: a single span processes items from multiple upstream spans
 - **Scatter/gather (fork/join)**: a root span fans out to multiple operations, then
   an aggregation span links back to all of them
-- **Trace boundary crossing**: when a new trace is created at a trust boundary,
+- **Trust boundary crossing**: when a new trace is created at a trust boundary,
   link back to the originating trace
 - **Fan-in**: multiple incoming messages trigger a single processing span
+- **Messaging consumer parenting**: a `process` span parented under the local
+  ambient context links back to the message's creation context (see below)
 
 ### Creating Links
 
@@ -232,7 +256,7 @@ public async Task<AggregatedResult> ScatterGatherAsync(List<Input> inputs)
 }
 ```
 
-### Trace Boundary Crossing
+### Trust Boundary Crossing
 
 When a service creates a new trace rather than trusting the incoming context
 (e.g., at a security/trust boundary), link back to the originating trace.
@@ -261,6 +285,32 @@ public async Task HandleUntrustedRequest(ActivityContext incomingContext)
         Activity.Current = previousActivity; // restore context
     }
 }
+```
+
+### Messaging Consumer Parenting Example
+
+The [messaging semantic conventions](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/) allow — and default to — parenting the `process` span under the local ambient context instead of the producer, with a **span link** to the producer's message creation context. In a pull-based consumer that ambient parent is the `receive` span, which the semconv assigns kind `Client` (pulling from the broker is a synchronous request/response with the broker; only the `process` span is `Consumer`):
+
+```
+Producer service                     Consumer service (pull-based)
+────────────────                     ─────────────────────────────
+send order.events (PRODUCER) ──┐     poll loop (INTERNAL)
+                               │       └─ receive (CLIENT)  ← sync call to broker
+     creation context          │            └─ process (CONSUMER)
+     travels in the message    └──────────────── link ──────┘
+```
+
+Here the `Consumer` span's direct parent is a `Client` span; the producer relationship is expressed as a link, not parenthood. If you instead parent the `process` span directly under the producer's creation context, the semconv says the ambient context SHOULD be added as a link on the `process` span to preserve that correlation.
+
+```csharp
+// process span: parented under the ambient context (the Client receive span),
+// linked to the message's creation context extracted from the message headers
+var creationContext = ExtractContext(message.Headers); // via Propagator, see below
+
+using var processActivity = ActivitySource.StartActivity(
+    ActivityKind.Consumer,
+    name: "ProcessOrderEvent",
+    links: [new ActivityLink(creationContext)]);
 ```
 
 ### Link Best Practices
@@ -318,60 +368,120 @@ With these, you do NOT need to manually propagate context for HTTP calls.
 ### Manual Propagation (Custom Transports)
 
 For non-standard transports (raw TCP, custom protocols, message systems without
-built-in instrumentation), use the OTel SDK's `TextMapPropagator` (from
-`OpenTelemetry.Context.Propagation`, requires an OTel NuGet package at the
-application root) to manually inject/extract context:
+built-in instrumentation), the default choice is the built-in `System.Diagnostics.DistributedContextPropagator` — it ships with the runtime (`System.Diagnostics.DiagnosticSource`, .NET 6+), so a library or custom transport needs **zero** OTel packages to propagate context. This follows the same "System.Diagnostics first" rule as `ActivitySource` vs `OpenTelemetry.Api`: the propagation API is already in the framework.
+
+This is also exactly what the platform itself does: `HttpClient` (SocketsHttpHandler) and ASP.NET Core inject/extract `traceparent`/`tracestate`/ baggage through `DistributedContextPropagator.Current`. A custom transport that uses the same mechanism behaves identically to the built-in ones, and the
+application root keeps control of propagation policy by setting `DistributedContextPropagator.Current` — see [Configuring the BCL Propagator](#configuring-the-bcl-propagator-application-root).
 
 ```csharp
-using OpenTelemetry.Context.Propagation;
-
-// ✅ Manual inject for outgoing call
+// ✅ Manual inject for outgoing call — library code, no OTel packages
 using var activity = ActivitySource.StartActivity("SendMessage", ActivityKind.Client);
 
 if (activity != null)
 {
     var headers = new Dictionary<string, string>();
-    var propagator = Propagators.DefaultTextMapPropagator;
-    propagator.Inject(new PropagationContext(activity.Context, Baggage.Current),
-        headers,
-        static (carrier, name, value) => ((Dictionary<string, string>)carrier!)[name] = value!);
+    DistributedContextPropagator.Current.Inject(activity, headers,
+        static (carrier, name, value) => ((Dictionary<string, string>)carrier!)[name] = value);
 
     await SendMessageAsync(payload, headers);
 }
 ```
 
 ```csharp
-// ✅ Manual extract for incoming request
-var propagator = Propagators.DefaultTextMapPropagator;
-var extracted = propagator.Extract(default, incomingHeaders,
-    static (carrier, name) =>
+// ✅ Manual extract for incoming request — library code, no OTel packages
+DistributedContextPropagator.Current.ExtractTraceIdAndState(incomingHeaders,
+    static (object? carrier, string name, out string? value, out IEnumerable<string>? values) =>
     {
-        if (((Dictionary<string, string>)carrier!).TryGetValue(name, out var value))
-            return new[] { value };
-        return null;
-    });
+        values = null;
+        ((Dictionary<string, string>)carrier!).TryGetValue(name, out value);
+    },
+    out var traceParent, out var traceState);
 
 // Create a server span with the extracted parent context
 using var activity = ActivitySource.StartActivity(
-    ActivityKind.Server,
-    name: "ReceiveMessage",
-    parentId: extracted.ActivityContext.TraceId != default
-        ? extracted.ActivityContext
-        : default);
+    "ReceiveMessage", ActivityKind.Server, parentId: traceParent);
+
+if (activity != null && traceState != null)
+{
+    activity.TraceStateString = traceState;
+}
 ```
 
-For library code (no OTel packages), use the built-in `DistributedContextPropagator`
-APIs: `DistributedContextPropagator.Current.Inject(activity, carrier, setter)` for
-injection, and `DistributedContextPropagator.Current.ExtractTraceIdAndState(...)`
-for extraction. These use the same `traceparent` header format.
+Baggage can be extracted with
+`DistributedContextPropagator.Current.ExtractBaggage(carrier, getter)`.
 
-### Custom Propagators
+#### Application-level alternative: OTel `TextMapPropagator`
 
-You can configure which propagators are active. For example, to support both
-W3C TraceContext and Baggage propagation (the OTel default composite):
+Use the OTel SDK's `TextMapPropagator` (from `OpenTelemetry.Context.Propagation`) **only when the built-in propagator cannot do the job, and only at the application root** — never in libraries. The legitimate cases are needing OTel `Baggage.Current` or a non-W3C wire format such as B3 (see below):
 
 ```csharp
-// Application setup
+using OpenTelemetry.Context.Propagation;
+
+// Manual inject for outgoing call (application code)
+var headers = new Dictionary<string, string>();
+var propagator = Propagators.DefaultTextMapPropagator;
+propagator.Inject(new PropagationContext(activity.Context, Baggage.Current),
+    headers,
+    static (carrier, name, value) => ((Dictionary<string, string>)carrier!)[name] = value!);
+```
+
+Note that `Sdk.SetDefaultTextMapPropagator` (OTel) and `DistributedContextPropagator.Current` (BCL) are separate registries that do not know about each other. An application that configures a non-default OTel propagator may therefore also need to **bridge** it into `DistributedContextPropagator.Current` (a small `DistributedContextPropagator` subclass wrapping the `TextMapPropagator`), otherwise `HttpClient`, ASP.NET Core, and BCL-propagating libraries will still emit/parse W3C headers. Libraries stay on `DistributedContextPropagator` regardless — bridging is an application-root concern.
+
+### Configuring the BCL Propagator (Application Root)
+
+`DistributedContextPropagator.Current` is a process-wide, settable static. Whatever the application root assigns here is what `HttpClient`, ASP.NET Core, and any library using the BCL pattern above will use:
+
+```csharp
+// Application setup — affects HttpClient, ASP.NET Core, and all BCL-propagating code
+DistributedContextPropagator.Current = DistributedContextPropagator.CreateW3CPropagator();
+```
+
+Built-in factories:
+
+| Factory | Behavior |
+|---------|----------|
+| `CreateDefaultPropagator()` | What `Current` is initialized with. Up to .NET 9: the legacy propagator (lenient encoding, baggage in the non-standard `Correlation-Context` header). **From .NET 10: the W3C propagator** ([breaking change](https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/10.0/default-trace-context-propagator)) |
+| `CreateW3CPropagator()` (.NET 10+) | Strict [W3C TraceContext](https://www.w3.org/TR/trace-context/) + [W3C Baggage](https://www.w3.org/TR/baggage/) — baggage in the `baggage` header, W3C-compliant encoding |
+| `CreatePreW3CPropagator()` (.NET 10+) | The legacy behavior, for backward compatibility after the .NET 10 default change |
+| `CreateNoOutputPropagator()` | Suppresses all outbound propagation — useful at trust boundaries (e.g., calls to third-party APIs that should not see your trace context) |
+| `CreatePassThroughPropagator()` | Forwards the headers received on the inbound request unchanged, using the root `Activity` and ignoring intermediate spans — useful for proxies/gateways |
+
+For a custom wire format, subclass `DistributedContextPropagator` and override its four abstract members:
+
+```csharp
+public sealed class CustomHeaderPropagator : DistributedContextPropagator
+{
+    public override IReadOnlyCollection<string> Fields { get; } = ["x-my-trace"];
+
+    public override void Inject(Activity? activity, object? carrier, PropagatorSetterCallback? setter)
+    {
+        if (activity is null || setter is null) return;
+        setter(carrier, "x-my-trace", activity.Id ?? string.Empty);
+    }
+
+    public override void ExtractTraceIdAndState(object? carrier, PropagatorGetterCallback? getter,
+        out string? traceId, out string? traceState)
+    {
+        traceId = null;
+        traceState = null;
+        if (getter is null) return;
+        getter(carrier, "x-my-trace", out traceId, out _);
+    }
+
+    public override IEnumerable<KeyValuePair<string, string?>>? ExtractBaggage(
+        object? carrier, PropagatorGetterCallback? getter) => null; // no baggage support
+}
+
+// Application setup — HttpClient and ASP.NET Core now speak this format too
+DistributedContextPropagator.Current = new CustomHeaderPropagator();
+```
+
+### Custom Propagators (OTel SDK)
+
+Configure OTel propagators **only at the application root, and only when you need to deviate from the W3C defaults** — the SDK already ships with the composite of `TraceContextPropagator` + `BaggagePropagator`, so restating that buys nothing. The example below shows the shape of the call; in practice you would add or replace entries (e.g., B3, see below):
+
+```csharp
+// Application setup — only needed when deviating from the W3C defaults
 Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
     new TextMapPropagator[]
     {
@@ -383,7 +493,7 @@ Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
 ### B3 Propagator (Legacy Compatibility)
 
 If you need to interoperate with systems using the [B3 propagation format](https://github.com/openzipkin/b3-propagation)
-(Zipkin-style), install `OpenTelemetry.Extensions.Propagators` and configure:
+(Zipkin-style), install `OpenTelemetry.Extensions.Propagators` at the application root and configure:
 
 ```csharp
 Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
@@ -394,6 +504,8 @@ Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
         new B3Propagator()  // legacy B3 multi-header format
     }));
 ```
+
+This changes only the OTel registry — `HttpClient`, ASP.NET Core, and libraries using  DistributedContextPropagator` still speak W3C. If B3 must apply to those too, bridge the composite into `DistributedContextPropagator.Current` as described above.
 
 ---
 
@@ -496,68 +608,128 @@ public async Task ProcessOrderAsync(Order order)
 
 ## Full Exception Recording Pattern
 
-The modern .NET approach uses `Activity.SetStatus()` as the primary mechanism.
-The OTel SDK translates `ActivityStatusCode` into the proper OTel span status.
+`Activity.SetStatus()` plus the `error.type` tag, governed by [Recording Errors](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/), is the current, non-deprecated way to mark a span as failed — implement it unconditionally. `Activity.AddEvent(new ActivityEvent("exception", ...))`, governed by [`exceptions-spans.md`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/), carries a **Deprecated** status in favor of recording exception details as a log record per [`exceptions-logs.md`](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/) — but the .NET ecosystem has not moved with it: no `OpenTelemetry.*` .NET package implements the spec's own `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` opt-in (verified against `OpenTelemetry.Api` 1.17.0), and `OpenTelemetry.Instrumentation.AspNetCore` 1.17.0 itself still records exceptions via `Activity.AddException` — span events. Concretely: today's exporters, backends, and trace UIs are built to read exception span events, and dropping them because the spec document is marked Deprecated will silently break exception visibility for every consumer still on that tooling. **Keep implementing exception span events as the default.** Treat the logs-based path as an opt-in layered on top, exactly as the spec's own transition guidance describes — see below.
 
-### Basic Pattern
+### Span Status and `error.type` (Current)
 
 ```csharp
 try
 {
-    await ProcessItemAsync();
-    activity?.SetStatus(ActivityStatusCode.Ok);
+    await ProcessItemAsync(); // success: leave status Unset, do not call SetStatus(Ok) — see below
 }
 catch (Exception ex)
 {
     if (activity != null)
     {
-        // Set error status with description
         activity.SetStatus(ActivityStatusCode.Error, ex.Message);
-
-        // Record exception as an event per OTel semantic conventions
-        activity.AddEvent(new ActivityEvent(
-            "exception",
-            tags: new ActivityTagsCollection
-            {
-                ["exception.type"] = ex.GetType().FullName,
-                ["exception.message"] = ex.Message,
-                // exception.stacktrace is Recommended by the span-event convention.
-                // Include it unless size, sensitivity, or volume policy says otherwise.
-                // For high-volume handled exceptions, prefer ILogger with trace correlation.
-                // ["exception.stacktrace"] = ex.ToString()
-            }
-        ));
+        activity.SetTag("error.type", ex.GetType().FullName);
     }
     throw;
 }
 ```
 
-### With Status Code Attributes
+Per `recording-errors.md`: span status **MUST** be left unset if the operation ended without error. On failure, instrumentation **SHOULD** set the status code to `Error`, **SHOULD** set `error.type`, and **SHOULD** set the status description — when failing with an exception, the description **SHOULD** be the exception message. Errors that were retried or handled, letting the operation complete gracefully, **SHOULD NOT** be recorded on spans or metrics — the spec's own worked example is a `createIfNotExists` call that catches `ResourceAlreadyExistsException` internally and returns `false`: that path does not set `Error` status or `error.type`, because from the caller's point of view the operation succeeded.
 
-For HTTP and other protocol handlers, also set the response status as a tag:
+`Ok` is a separate, narrower case governed by the [Set Status API spec](https://opentelemetry.io/docs/specs/otel/trace/api/#set-status), not by `recording-errors.md`: "Instrumentation Libraries SHOULD NOT set the status code to `Ok`, unless explicitly configured to do so... Application developers and Operators may set the status code to `Ok`." So library/instrumentation code should leave status `Unset` on success and never call `SetStatus(Ok)`; `Ok` exists for application-level code that wants to make a final call — most commonly overriding a library-reported `Error` it has decided isn't a real failure, such as suppressing noisy 404s. Once set, `Ok` is final and further status changes are ignored.
+
+### Span Events Today, Logs as an Opt-In
+
+Implement both, gated by the same `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` environment variable the spec defines for instrumentations transitioning off span events: `logs` (logs only), `logs/dup` (both, for a phased rollout), and — absent either value — the default stays span events only, matching what current .NET tooling consumes:
 
 ```csharp
-catch (HttpRequestException ex) when (ex.StatusCode != null)
+// Mirrors OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN: unset/anything else → spans only (today's default), "logs/dup" → both, "logs" → logs only.
+private static readonly string? ExceptionSignalOptIn = Environment.GetEnvironmentVariable("OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN");
+private static readonly bool EmitSpanEvents = ExceptionSignalOptIn != "logs";
+private static readonly bool EmitLogs = ExceptionSignalOptIn is "logs" or "logs/dup";
+
+catch (Exception ex)
 {
-    if (activity != null)
+    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+    activity?.SetTag("error.type", ex.GetType().FullName);
+
+    if (EmitSpanEvents) // ✅ default — what current .NET exporters, backends, and trace UIs actually consume
     {
-        activity.SetStatus(ActivityStatusCode.Error, ex.Message);
-        activity.SetTag("http.response.status_code", (int)ex.StatusCode);
-        activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
+        activity?.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
         {
             ["exception.type"] = ex.GetType().FullName,
             ["exception.message"] = ex.Message,
-            // Include exception.stacktrace unless size, sensitivity, or volume policy says otherwise
+            ["exception.stacktrace"] = ex.ToString()
         }));
     }
+
+    if (EmitLogs) // opt-in — the spec's forward direction; must be logged while `activity` is still Activity.Current, see below
+    {
+        logger.LogError(ex, "Item processing failed");
+    }
+
     throw;
 }
+```
+
+Passing the exception instance to `ILogger` gets trace correlation and attribute mapping for free: the OTel .NET Logs SDK reads `Activity.Current` when the `LogRecord` is constructed and stamps `trace_id`/`span_id` from it automatically, and the OTLP log exporter derives `exception.type`, `exception.message`, and `exception.stacktrace` from the exception instance — none of that needs to be set by hand, and don't set `exception.escaped` on the span event either, since it's deprecated outright.
+
+Severity, per `exceptions-logs.md`, reflects expected impact, not just presence: `FATAL` for exceptions that cause application shutdown, `ERROR` for unhandled exceptions (semantic conventions defining `SERVER`/`CONSUMER` spans should recommend this), `WARN` for exceptions expected to be handled by the caller (`CLIENT`/`PRODUCER` spans should recommend this — e.g. a connection timeout, a retry-exhausted client call), `DEBUG` for exceptions that don't indicate an actual issue (the spec's own example: a request cancelled client-side and detected server-side), `INFO`/`TRACE` are available to application developers but semantic conventions should not prescribe them.
+
+The spec's correlation requirement is a MUST, not a SHOULD, and it applies to both signals: "exception events emitted by instrumentations that also record spans for the same operation MUST be associated with the corresponding span context." In .NET that means both the `AddEvent` call and the log call have to happen before the enclosing `using activity = source.StartActivity(...)` scope ends. This is a real failure mode, not a theoretical one — a nested `try`/`catch` where the outer method's activity scope closes before an inner exception-reporting callback fires will find `Activity.Current` already reverted to the parent (or null) by the time the callback runs, so the exception record silently attaches to the wrong span. Always trace the call path from `catch` to wherever the exception is actually recorded and confirm it stays inside the `using` block.
+
+Don't drop span events in a patch release, and don't drop them on a fixed timeline either. The spec's own minimum is holding dual-emission (`logs/dup`) for at least six months on a stable major version, with security patches at a minimum, before dropping the environment variable and the span events in the next major version — but treat that as a floor, not a target: only move to `logs`-only once you've confirmed your actual consumers read log-based exceptions, which for most .NET users today they don't yet.
+
+### Example: Exception Callback With No Logging Dependency
+
+A library's core can emit the exception span event itself — that only needs `System.Diagnostics.DiagnosticSource`, already a given. What it usually can't do is also take a hard dependency on `Microsoft.Extensions.Logging.Abstractions` or any other logging package just to support the logs opt-in — that would force a logging dependency onto every consumer, including the ones staying on spans-only. The fix is the same pattern used for context propagation hooks in messaging clients: a settable delegate that the core invokes synchronously, in place, right where the exception is caught. The `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` flag check belongs entirely inside the core — the consumer registering the callback shouldn't have to know the flag exists at all; they just register a callback and log through whatever abstraction they already use.
+
+```csharp
+// Core library — references only System.Diagnostics.DiagnosticSource. No Microsoft.Extensions.Logging.Abstractions, no OpenTelemetry package.
+public static class MyLibraryDiagnostics
+{
+    public static Action<Exception, string>? ExceptionCallback { get; set; } // a consumer registers this; the core alone decides when to invoke it
+}
+
+internal sealed class Consumer
+{
+    private static readonly ActivitySource Source = new("MyLibrary");
+    // Mirrors OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN: unset/anything else → spans only (today's default), "logs/dup" → both, "logs" → logs only.
+    private static readonly string? ExceptionSignalOptIn = Environment.GetEnvironmentVariable("OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN");
+    private static readonly bool EmitSpanEvents = ExceptionSignalOptIn != "logs";
+    private static readonly bool EmitLogs = ExceptionSignalOptIn is "logs" or "logs/dup";
+
+    public async Task DeliverAsync(Message message)
+    {
+        using var activity = Source.StartActivity("deliver", ActivityKind.Consumer);
+        try
+        {
+            await ProcessAsync(message); // success: leave status Unset — this is library code, so no SetStatus(Ok)
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.SetTag("error.type", ex.GetType().FullName);
+
+            if (EmitSpanEvents) // ✅ default — what current .NET exporters, backends, and trace UIs actually consume
+            {
+                activity?.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection { ["exception.type"] = ex.GetType().FullName, ["exception.message"] = ex.Message, ["exception.stacktrace"] = ex.ToString() }));
+            }
+
+            MyLibraryDiagnostics.ExceptionCallback?.Invoke(ex, "deliver"); // deferring this call (Task.Run, a queue drained later) would let Activity.Current revert before it runs
+
+            throw;
+        }
+    }
+}
+```
+
+```csharp
+// Consumer code, registered once at startup — no OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN check here; the library already decided whether this callback gets invoked at all.
+MyLibraryDiagnostics.ExceptionCallback = (exception, operationName) =>
+{
+    // Log via whatever abstraction you already use — ILogger, Serilog, NLog, etc. Activity.Current is still the "deliver" span the core had open when it invoked this callback, so a sink that reads Activity.Current (as the OTel .NET Logs SDK does for ILogger) correlates trace_id/span_id automatically.
+    logger.LogError(exception, "{Operation} failed", operationName);
+};
 ```
 
 ### Legacy Compatibility
 
-The manual `otel.status_code` and `otel.status_description` **tags** were required
-in early OTel .NET versions before `Activity.SetStatus()` was available:
+The manual `otel.status_code` and `otel.status_description` **tags** were required in early OTel .NET versions before `Activity.SetStatus()` was available:
 
 ```csharp
 // ❌ LEGACY — no longer needed, prefer SetStatus
@@ -565,19 +737,18 @@ activity.SetTag("otel.status_code", "error");
 activity.SetTag("otel.status_description", ex.Message);
 ```
 
-Do NOT use these tags in new code. `Activity.SetStatus()` is the modern API and the
-OTel SDK handles translation to the OTel span status fields automatically.
+Do NOT use these tags in new code. `Activity.SetStatus()` is the modern API and the OTel SDK handles translation to the OTel span status fields automatically.
 
-### Exception Event Attribute Reference
+### Exception Attribute Reference
 
-Per the [OTel exception span conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/):
+`exceptions-spans.md` is **Deprecated**; `exceptions-logs.md` is the current document, and both share the same first three attributes. `exception.escaped` is deprecated outright, not just deprioritized — "it's no longer recommended to record exceptions that are handled and do not escape the scope of a span" — and has no equivalent in the logs convention.
 
-| Attribute | Required | Description |
-|-----------|----------|-------------|
-| `exception.type` | Yes (if available) | Fully qualified exception type name |
-| `exception.message` | Yes (if available) | The exception message |
-| `exception.stacktrace` | Recommended | String representation of the stack trace |
-| `exception.escaped` | Optional | `true` if the exception escaped the span boundary |
+| Attribute | Stability | Requirement | Description |
+|-----------|-----------|-------------|-------------|
+| `exception.type` | Stable | Conditionally Required (if `exception.message` not set) | Fully qualified exception type name |
+| `exception.message` | Stable | Conditionally Required (if `exception.type` not set) | The exception message |
+| `exception.stacktrace` | Stable | Recommended | String representation of the stack trace |
+| `exception.escaped` | **Deprecated** | Span events only, not recommended | Whether the exception escaped the span boundary — don't set this |
 
 ---
 
@@ -592,5 +763,8 @@ Per the [OTel exception span conventions](https://opentelemetry.io/docs/specs/se
 - [W3C Baggage](https://www.w3.org/TR/baggage/)
 - [OTel .NET: Creating Links Between Traces](https://opentelemetry.io/docs/languages/dotnet/traces/links-creation/)
 - [OTel .NET: Reporting Exceptions](https://opentelemetry.io/docs/languages/dotnet/traces/reporting-exceptions/)
-- [OTel Exception Span Conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/)
+- [OTel Recording Errors](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/)
+- [OTel Exception Span Conventions (Deprecated)](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/)
+- [OTel Exception Logs Conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/)
+- [OTel General Events Conventions](https://opentelemetry.io/docs/specs/semconv/general/events/)
 - [.NET Distributed Tracing Documentation](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/distributed-tracing)
