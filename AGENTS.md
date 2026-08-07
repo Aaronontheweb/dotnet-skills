@@ -89,9 +89,9 @@ When adding a skill with a **new prefix pattern**, update `scripts/generate-skil
 ## Marketplace Publishing
 
 **To publish a release:**
-1. Update version in `.claude-plugin/plugin.json` **and** `.codex-plugin/plugin.json` — they must match (CI enforces this via `scripts/validate-codex-plugin.sh`)
-2. Push a semver tag: `git tag v1.0.0 && git push origin v1.0.0`
-3. GitHub Actions creates the release automatically
+1. Bump versions with `./scripts/bump-version.sh <version>` — updates `.claude-plugin/plugin.json` **and** `.codex-plugin/plugin.json` together and runs the lockstep validator. Never edit the version fields by hand.
+2. Update `RELEASE_NOTES.md`
+3. Push a semver tag: `git tag v<version> && git push origin v<version>` — CI verifies the tag matches both manifests, then creates the release automatically
 
 **Users install with:**
 ```bash

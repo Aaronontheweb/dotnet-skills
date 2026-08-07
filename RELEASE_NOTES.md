@@ -1,5 +1,32 @@
 # Release Notes
 
+## v1.5.0 (2026-08-07)
+
+### New Skills
+
+- **csharp-nullable-reference-types** - Added a progressive-disclosure skill for introducing and using nullable reference types (NRT) in C#/.NET codebases. Covers the nullability model and flow analysis, the null-forgiving operator, API design rules, the full `System.Diagnostics.CodeAnalysis` attribute catalog (AllowNull, DisallowNull, MaybeNull, NotNull, NotNullWhen, MaybeNullWhen, NotNullIfNotNull, MemberNotNull, MemberNotNullWhen, DoesNotReturn, DoesNotReturnIf), the C# 14 `field` keyword, and incremental migration of legacy codebases. Sibling reference files cover the NRT migration playbook and the nullable-attributes catalog with a code-generation checklist. ([#74](https://github.com/Aaronontheweb/dotnet-skills/pull/74))
+
+### Features
+
+- **OpenAI Codex plugin support** - Added a Codex plugin manifest, marketplace, and CI validation so the toolkit installs in OpenAI Codex (`codex plugin marketplace add Aaronontheweb/dotnet-skills`). Skills are auto-discovered from the `skills/` directory; the specialized agents remain Claude Code-specific. Release workflow now validates the Codex manifest and publishes Codex install instructions. ([#76](https://github.com/Aaronontheweb/dotnet-skills/pull/76))
+
+### Skill Enhancements
+
+- **opentelemetry-dotnet-instrumentation: exception recording & propagation corrections** - Corrected span status handling (leave status Unset on success; use `SetStatus(Error)` + `error.type` tag on exception), added dual-emission guidance for exception span events + `ILogger` logs with the `OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN` opt-in and a 6-month minimum dual-emission window, and documented a library error-reporting callback pattern for libraries without a logging dependency. Traces reference clarified SpanKind sync-vs-async semantics, corrected the messaging semconv (`receive` is kind Client, only `process` is Consumer), documented both Consumer-parenting options, and fixed manual context extraction to propagate `TraceState`. ([#72](https://github.com/Aaronontheweb/dotnet-skills/pull/72))
+
+### Documentation Improvements
+
+- **README: Codex installation + structure docs** - Updated branding to "for Claude Code and Codex", added Codex install instructions, and refreshed the repo-structure tree and contribution workflow. ([#76](https://github.com/Aaronontheweb/dotnet-skills/pull/76))
+- **Marketplace description update** - Refreshed the marketplace description to reflect new skills. ([#73](https://github.com/Aaronontheweb/dotnet-skills/pull/73))
+
+### Internal
+
+- **bump-version.sh** - Added a release script that bumps the version in both plugin manifests in lockstep, plus a CI guard that fails a tag push if the tag doesn't match the manifest version. ([#76](https://github.com/Aaronontheweb/dotnet-skills/pull/76))
+- **AGENTS.md canonical + CLAUDE.md symlink** - Expanded AGENTS.md into full contributor guidance; CLAUDE.md is now a symlink to it. ([#77](https://github.com/Aaronontheweb/dotnet-skills/pull/77))
+- **generate-release-summary.sh** - Added maintainer tooling to summarize new/updated skills and agents since a tag. ([#71](https://github.com/Aaronontheweb/dotnet-skills/pull/71))
+
+---
+
 ## v1.4.1 (2026-07-03)
 
 ### Skill Enhancements

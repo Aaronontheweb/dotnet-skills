@@ -113,6 +113,25 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify tag matches manifest version
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          PLUGIN_VERSION=$(jq -r '.version' .claude-plugin/plugin.json)
+          CODEX_VERSION=$(jq -r '.version' .codex-plugin/plugin.json)
+          echo "Tag version: v$TAG_VERSION"
+          echo "Claude manifest version: $PLUGIN_VERSION"
+          echo "Codex manifest version: $CODEX_VERSION"
+          if [ "$TAG_VERSION" != "$PLUGIN_VERSION" ]; then
+            echo "ERROR: Tag v$TAG_VERSION does not match .claude-plugin/plugin.json version $PLUGIN_VERSION"
+            echo "       Run ./scripts/bump-version.sh $TAG_VERSION before tagging."
+            exit 1
+          fi
+          if [ "$TAG_VERSION" != "$CODEX_VERSION" ]; then
+            echo "ERROR: Tag v$TAG_VERSION does not match .codex-plugin/plugin.json version $CODEX_VERSION"
+            echo "       Run ./scripts/bump-version.sh $TAG_VERSION before tagging."
+            exit 1
+          fi
+
       - name: Generate release notes
         run: |
           VERSION=$(jq -r '.version' .claude-plugin/plugin.json)
