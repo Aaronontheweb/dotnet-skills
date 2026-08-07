@@ -146,7 +146,13 @@ jobs:
 
           HEADER
 
-          echo "This release includes **$SKILLS skills** and **$AGENTS agents** for .NET development." >> notes.md
+          # Use the release summary script for new/updated counts when we have a previous tag
+          if [ -n "$PREV_TAG" ]; then
+            SUMMARY=$(bash ./scripts/generate-release-summary.sh "$PREV_TAG")
+            echo "$SUMMARY" >> notes.md
+          else
+            echo "This release includes **$SKILLS skills** and **$AGENTS agents** for .NET development." >> notes.md
+          fi
           echo "" >> notes.md
 
           # List skills by category
