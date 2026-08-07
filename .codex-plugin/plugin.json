@@ -1,0 +1,29 @@
+{
+  "name": "dotnet-skills",
+  "version": "1.4.1",
+  "description": "Professional .NET development skills for Codex - covering C#, F#, Akka.NET, Aspire, testing frameworks, and specialized tools",
+  "author": {
+    "name": "Aaron Stannard",
+    "url": "https://github.com/Aaronontheweb"
+  },
+  "repository": "https://github.com/Aaronontheweb/dotnet-skills",
+  "license": "MIT",
+  "keywords": [
+    "dotnet",
+    "csharp",
+    "akka-net",
+    "aspire",
+    "testing",
+    "efcore",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": ".NET Skills",
+    "shortDescription": "Professional .NET development skills for C#, Akka.NET, Aspire, and testing",
+    "longDescription": "Battle-tested .NET development patterns from production systems: modern C# coding standards, Akka.NET distributed systems, Aspire cloud-native orchestration, EF Core, testing frameworks, and performance optimization.",
+    "developerName": "Aaron Stannard",
+    "category": "Productivity",
+    "capabilities": []
+  }
+}

@@ -15,15 +15,20 @@ This is a knowledge base repository - not a traditional code project. There is n
 ```
 dotnet-skills/
 ├── .claude-plugin/
-│   ├── marketplace.json    # Marketplace catalog
-│   └── plugin.json         # Plugin metadata + skill/agent registry
+│   ├── marketplace.json    # Claude Code marketplace catalog
+│   └── plugin.json         # Claude Code plugin metadata + skill/agent registry
+├── .codex-plugin/
+│   └── plugin.json         # Codex plugin metadata (skills auto-discovered from ./skills/)
+├── .agents/
+│   └── plugins/
+│       └── marketplace.json  # Codex marketplace
 ├── skills/                 # Flat structure for Copilot compatibility
 │   ├── akka-best-practices/SKILL.md
 │   ├── aspire-integration-testing/SKILL.md
 │   ├── csharp-coding-standards/SKILL.md
 │   ├── testcontainers/SKILL.md
 │   └── ...
-├── agents/                 # Agent definitions (flat .md files)
+├── agents/                 # Agent definitions (flat .md files, Claude Code only)
 └── scripts/                # Validation and sync scripts
 ```
 
@@ -63,9 +68,11 @@ color: purple  # optional
    - Use appropriate prefix for framework-specific skills (see naming convention above)
    - No prefix for general .NET skills
 2. Add the skill path to `.claude-plugin/plugin.json` in the `skills` array
+   - The Codex plugin (`.codex-plugin/plugin.json`) auto-discovers the whole `skills/` dir — no manifest change needed there
 3. Run `./scripts/validate-marketplace.sh` to verify
-4. Run `./scripts/generate-skill-index-snippets.sh --update-readme` to regenerate the compressed index
-5. Commit all changes together (SKILL.md, plugin.json, and README.md)
+4. Run `./scripts/validate-codex-plugin.sh` to verify the Codex plugin (frontmatter, version lockstep)
+5. Run `./scripts/generate-skill-index-snippets.sh --update-readme` to regenerate the compressed index
+6. Commit all changes together (SKILL.md, plugin.json, and README.md)
 
 ### Adding Skills to Index Categories
 
@@ -82,14 +89,19 @@ When adding a skill with a **new prefix pattern**, update `scripts/generate-skil
 ## Marketplace Publishing
 
 **To publish a release:**
-1. Update version in `.claude-plugin/plugin.json`
+1. Update version in `.claude-plugin/plugin.json` **and** `.codex-plugin/plugin.json` — they must match (CI enforces this via `scripts/validate-codex-plugin.sh`)
 2. Push a semver tag: `git tag v1.0.0 && git push origin v1.0.0`
 3. GitHub Actions creates the release automatically
 
 **Users install with:**
 ```bash
+# Claude Code
 /plugin marketplace add Aaronontheweb/dotnet-skills
 /plugin install dotnet-skills
+
+# Codex
+codex plugin marketplace add Aaronontheweb/dotnet-skills
+codex plugin add dotnet-skills@dotnet-skills
 ```
 
 See `skills/marketplace-publishing/SKILL.md` for detailed workflow.
