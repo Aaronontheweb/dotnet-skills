@@ -112,7 +112,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pretraining for any .NET work.
 Workflow: skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts.
 
 Routing (invoke by name)
-- C# / code quality: modern-csharp-coding-standards, csharp-concurrency-patterns, api-design, type-design-performance, r3-reactive-extensions
+- C# / code quality: modern-csharp-coding-standards, csharp-concurrency-patterns, csharp-unsafe-code, api-design, type-design-performance, r3-reactive-extensions
 - ASP.NET Core / Web (incl. Aspire): aspire-service-defaults, aspire-integration-testing, mailpit-integration, mjml-email-templates, verify-email-snapshots
 - Data: efcore-patterns, database-performance
 - DI / config: dependency-injection-patterns, microsoft-extensions-configuration
@@ -136,7 +136,7 @@ Run `./scripts/generate-skill-index-snippets.sh --update-readme` to refresh the 
 |flow:{skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts}
 |route:
 |akka:{akka-net-best-practices,akka-net-testing-patterns,akka-hosting-actor-patterns,akka-net-aspire-configuration,akka-net-management}
-|csharp:{modern-csharp-coding-standards,csharp-concurrency-patterns,csharp-nullable-reference-types,api-design,type-design-performance,r3-reactive-extensions}
+|csharp:{modern-csharp-coding-standards,csharp-concurrency-patterns,csharp-nullable-reference-types,csharp-unsafe-code,api-design,type-design-performance,r3-reactive-extensions}
 |aspnetcore-web:{aspire-integration-testing,aspire-configuration,aspire-service-defaults,mailpit-integration,mjml-email-templates}
 |data:{efcore-patterns,database-performance}
 |di-config:{microsoft-extensions-configuration,dependency-injection-patterns}
