@@ -1,6 +1,6 @@
 ---
 name: csharp-unsafe-code
-description: Write, review, audit, reduce, and migrate C# unsafe code. Use for designing safe-callable boundaries and requires-unsafe contracts; diagnosing unsafe compiler errors; choosing safe replacements; or working with AllowUnsafeBlocks, unsafe contexts, pointers, fixed, stackalloc, function pointers, Span/ref structs, Unsafe, MemoryMarshal, Marshal, native allocation, and P/Invoke.
+description: Write, review, audit, reduce, and migrate C# unsafe code. Use for designing safe-callable boundaries and requires-unsafe contracts; diagnosing unsafe compiler errors; choosing safe replacements; or working with AllowUnsafeBlocks, unsafe contexts, pointers, fixed, stackalloc, function pointers, Span/ref structs, Unsafe, MemoryMarshal, Marshal, UnsafeAccessor, native allocation, and P/Invoke.
 ---
 
 # C# Unsafe Code
@@ -19,7 +19,7 @@ Choose the mode that matches the request:
 ## Apply the Core Method
 
 1. **Establish the environment.** Record every target framework, SDK/compiler, `LangVersion`, `AllowUnsafeBlocks`, safety-rule opt-in, configuration, generated source producer, analyzer, native dependency, and consuming assembly that affects the code.
-2. **Map contexts and operations.** Distinguish lexical `unsafe` contexts, pointer-bearing signatures, low-level APIs that do not use unsafe syntax, and requires-unsafe caller contracts under the updated model. Locate pointer and function-pointer use, `fixed`, pointer-producing `stackalloc`, general unmanaged `sizeof`, ref-like code, `Unsafe`, `MemoryMarshal`, `Marshal`, native allocation, and interop.
+2. **Map contexts and operations.** Distinguish lexical `unsafe` contexts, pointer-bearing signatures, low-level APIs that do not use unsafe syntax, and requires-unsafe caller contracts under the updated model. Locate pointer and function-pointer use, `fixed`, pointer-producing `stackalloc`, general unmanaged `sizeof`, ref-like code, `Unsafe`, `MemoryMarshal`, `Marshal`, native allocation, and interop. Classify each API by the hazard it can cause when used as documented, never by its name; `UnsafeAccessor`, for example, is a runtime-validated visibility bypass, not a memory hazard.
 3. **Choose the boundary.** Remove equivalent unsafe work, localize operations whose preconditions the implementation can validate, and propagate only obligations that the caller must establish or preserve.
 4. **Prove the operation.** Check bounds, ownership, lifetime, pinning, alignment, initialization, representation, layout, blittability, native ABI, overlap, concurrency, and cleanup. Account for callbacks, suspension, exceptions, disposal, and GC movement.
 5. **Minimize unchecked regions.** Prefer the smallest lexical unsafe block around the operation. Keep validation adjacent, prevent pointers and refs from escaping their valid lifetime, and add a concise `// SAFETY:` comment when the proof is not obvious.
@@ -62,6 +62,7 @@ Keep both references one link away from this file. Use the installed SDK's suppo
 - Record the installed SDK/compiler, language version, target frameworks, `AllowUnsafeBlocks`, and any active safety-rule opt-in.
 - Identify every lexical context, low-level operation, lifetime, owner, and caller-controlled obligation in scope, including generated code.
 - Justify remove, localize, or propagate for each changed boundary; do not broaden an unsafe context to silence a diagnostic.
+- Support any claimed requires-unsafe contract, compatibility risk, or hazard classification with evidence from the installed SDK — reference assemblies, active design sources, or a reproduced diagnostic — not naming or analogy; record unverified possibilities as open questions.
 - Validate bounds, initialization, pinning, representation, ABI, concurrency, cleanup, and suspension boundaries as applicable.
 - Keep public, virtual, interface, partial, delegate, interop, and generated contracts aligned.
 - Test boundary and failure cases, GC/lifetime behavior, every supported target framework, and measured hot-path performance.

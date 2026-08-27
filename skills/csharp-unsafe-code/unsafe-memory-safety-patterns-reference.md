@@ -296,7 +296,15 @@ Audit generated signatures and native headers together:
 - callback calling convention, rooting, lifetime, and exception behavior;
 - platform-specific layout and architecture.
 
-Under the updated model, interop declarations and generated code may acquire explicit safety contracts. Do not assume generation exempts them from diagnostics.
+Under the updated model, interop declarations and generated code may acquire explicit safety contracts. Do not assume generation exempts them from diagnostics. Scope that caution to the declarations under audit; do not extend it by analogy to unrelated attributed or generated patterns.
+
+### Treat UnsafeAccessor as a visibility boundary, not a memory hazard
+
+`[UnsafeAccessor]` extern members suppress visibility checks for member binding. The runtime still validates the declared signature against the target member — return and parameter types, generic-parameter form and index, and generic constraints must match — and a mismatch fails the bind with `MissingFieldException`/`MissingMethodException`. A bound accessor yields a correctly typed reference to a real member, so it bypasses encapsulation but cannot fabricate type confusion or out-of-bounds access the way `Unsafe.As` or unchecked offsetting can.
+
+Audit it for what can actually break: contract drift when the target member is renamed or removed across dependency versions, the signature-precision rules for generics, and encapsulation invariants the target type relied on. It was designed as the AOT- and trimming-safe replacement for reflection-based access to non-public members (runtime proposal #81741; generic support in #99468).
+
+Do not classify it as a requires-unsafe candidate, or flag it under the updated model, based on its name or on generic generated-code cautions. Do so only with SDK evidence: the installed reference assemblies, the active design sources, or a reproduced diagnostic.
 
 ### Treat IntPtr and nint as pointer-smuggling
 
@@ -377,6 +385,7 @@ Runtime PR [#127539](https://github.com/dotnet/runtime/pull/127539) records Uniq
 | Apply `RequiresUnsafeAttribute` in source or copy a proposal namespace. | Use supported `unsafe` syntax and let the compiler emit metadata. |
 | Keep a pointer/span/ref after returning an array or arena block to a pool. | End all borrows before return and prevent callbacks/tasks from retaining them. |
 | Assume reflection, `dynamic`, or a delegate preserves compiler safety contracts. | Validate at runtime boundaries and test indirect invocation paths. |
+| Infer a requires-unsafe or memory-safety risk from an API's name — treating `UnsafeAccessor` like `Unsafe.As`. | Classify by hazard capability using runtime semantics: validated visibility binding fails closed; type-confusion and unchecked-offsetting primitives do not. Verify contract claims against the installed SDK. |
 | Free native memory in both failure cleanup and owner disposal. | Establish one owner, transfer explicitly, and release exactly once with `SafeHandle`/`IDisposable`. |
 | Accept callback reentrancy while a raw pointer assumes stable object state. | Pin/lock/copy as required, minimize callback scope, and revalidate state after reentrancy. |
 
