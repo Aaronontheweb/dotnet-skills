@@ -72,12 +72,13 @@ Map each occurrence and the region that authorizes it:
 | Function pointers (`delegate*`) | Declarations and invocation are unsafe-code work. Verify signature, calling convention, target lifetime, and exception behavior. |
 | `Span<T>`, `ReadOnlySpan<T>`, refs, and ref structs | Not inherently unsafe syntax. They still impose lifetime, aliasing, mutation, and suspension restrictions; do not carry ref-like state across an `await` or `yield`. |
 | `Unsafe`, `MemoryMarshal`, `Marshal`, `IntPtr`/`nint`, native allocation, and pointer-free P/Invoke | Many calls need no lexical unsafe context, but can bypass type, representation, ownership, or lifetime guarantees. Review them as unsafe in the design sense. |
+| `[UnsafeAccessor]` extern members | Suppress visibility checks on member binding only. The runtime validates the declared signature and generic constraints; a mismatch throws `MissingFieldException`/`MissingMethodException` instead of mis-binding. Audit for contract drift and encapsulation bypass, not for memory safety. |
 
 Do not search only for the `unsafe` keyword. Include generated code, pointer-bearing public signatures, fixed buffers, function pointers, interop declarations, explicit layout, native handles and allocations, ref-returning APIs, `SkipLocalsInit`, and low-level helper calls. Record where the storage originates, who owns it, how its extent is established, and when every borrow ends.
 
 ### Calls and boundaries under legacy rules
 
-A pointer-bearing signature forces callers that mention or construct the pointer value into an appropriate lexical context, but a legacy member-level `unsafe` modifier is not a general declaration of caller responsibility. Conversely, a method using `Unsafe` or `MemoryMarshal` can have an entirely safe-looking signature and no `unsafe` keyword. Judge the boundary by what ordinary callers can cause, not by syntax alone.
+A pointer-bearing signature forces callers that mention or construct the pointer value into an appropriate lexical context, but a legacy member-level `unsafe` modifier is not a general declaration of caller responsibility. Conversely, a method using `Unsafe` or `MemoryMarshal` can have an entirely safe-looking signature and no `unsafe` keyword. Judge the boundary by what ordinary callers can cause, not by syntax or naming: a runtime-validated visibility bypass such as `UnsafeAccessor` fails closed on mismatch, while `Unsafe.As` fabricates type conversions by design.
 
 A safe-callable wrapper must validate every caller-controlled precondition and contain the unchecked operation. If the caller supplies an address, guarantees external initialization, owns native storage, or must preserve a lifetime the implementation cannot verify, expose and document that obligation honestly instead of hiding it behind a safe-looking helper.
 
@@ -267,6 +268,12 @@ Source uses the `unsafe` keyword. The compiler represents requires-unsafe in met
 Current runtime source places `RequiresUnsafeAttribute` in `System.Diagnostics.CodeAnalysis`; older design examples used `System.Runtime.CompilerServices`. Recheck the installed reference assemblies and [runtime metadata PR #125721](https://github.com/dotnet/runtime/pull/125721). Never hard-code a namespace, define a polyfill speculatively, or emit the attribute by hand.
 
 The module-level memory-safety rules marker is also compiler/tooling metadata. Let the installed compiler emit it from the recognized opt-in.
+
+### Evidence for contract-risk claims
+
+Any claim that a specific API acquires a requires-unsafe contract or newly diagnoses under the updated model is a metadata claim about a specific compiler version. Support it with the installed SDK's reference assemblies, the active design or compiler sources, or a reproduced diagnostic recorded against the environment checklist.
+
+Name similarity, a shared namespace, or a generic caution about generated code are not evidence. `UnsafeAccessor` and `System.Runtime.CompilerServices.Unsafe` share a namespace prefix but not a hazard class: the accessor suppresses visibility checks with runtime-validated binding and fails closed; `Unsafe.As` fabricates type confusion by design. Record unverified possibilities as open questions, never as risks in a migration inventory.
 
 ### Asymmetric compatibility
 
