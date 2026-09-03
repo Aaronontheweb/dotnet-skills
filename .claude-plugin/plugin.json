@@ -43,7 +43,8 @@
     "./skills/skills-index-snippets",
     "./skills/dotnet-devcert-trust",
     "./skills/ilspy-decompile",
-    "./skills/opentelementry-dotnet-instrumentation"
+    "./skills/opentelementry-dotnet-instrumentation",
+    "./skills/aot-trimming"
   ],
   "agents": [
     "./agents/akka-net-specialist.md",
