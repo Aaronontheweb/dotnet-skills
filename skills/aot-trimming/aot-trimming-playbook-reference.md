@@ -117,6 +117,31 @@ internal const DynamicallyAccessedMemberTypes CreatorMembersRequired =
     DynamicallyAccessedMemberTypes.NonPublicConstructors;
 ```
 
+**Carry DAM through a container.** A dictionary, cache, or tuple strips the annotation from a stored `Type`. Wrap it in a record whose **explicit property** carries `[DynamicallyAccessedMembers]`, and the flow survives the container:
+
+```csharp
+public readonly record struct TypeKey
+{
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)]
+    public required Type Type { get; init; }
+}
+
+// The wrapped Type keeps its DAM annotation through the dictionary key.
+private static readonly Dictionary<TypeKey, int> _methodCounts = new();
+
+public static int GetMethodCount(TypeKey key)
+{
+    if (!_methodCounts.TryGetValue(key, out var count))
+    {
+        count = key.Type.GetMethods().Length; // no warning: key.Type carries PublicMethods
+        _methodCounts[key] = count;
+    }
+    return count;
+}
+```
+
+The annotation on the property flows to both the backing field and the getter's return value, so reading `key.Type` yields an annotated `Type`. Use a `record` (struct or class) for value/structural equality so it works as a dictionary key, and put the annotation on an **explicit property** — a positional record parameter's attribute does not flow to the getter return.
+
 ---
 
 ## Unsafe accessors for non-public members
