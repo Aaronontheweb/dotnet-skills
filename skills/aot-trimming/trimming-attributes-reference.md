@@ -145,7 +145,7 @@ public sealed class ProcessingContext
 }
 ```
 
-`RequiresUnreferencedCode`, `RequiresDynamicCode`, and `UnconditionalSuppressMessage` target methods, so placing them directly on an accessor works (accessors compile to methods). There is no `[set:]`/`[get:]` attribute target in C# — `[set: ...]` produces a CS0658 warning and the attribute is silently ignored. Use the attribute directly on the accessor, or the explicit `[method:]` target. `[return: DynamicallyAccessedMembers(...)]` preserves only the returned `Type`; `[field: DynamicallyAccessedMembers(...)]` puts the requirement on the backing field without touching the property surface.
+`RequiresUnreferencedCode`, `RequiresDynamicCode`, and `UnconditionalSuppressMessage` target methods, so placing them directly on an accessor works (accessors compile to methods). Use the attribute directly on the accessor, or the explicit `[method:]` target. `[return: DynamicallyAccessedMembers(...)]` preserves only the returned `Type`; `[field: DynamicallyAccessedMembers(...)]` puts the requirement on the backing field without touching the property surface.
 
 Rule of thumb: annotate the narrowest part that actually needs it, so callers only get a warning or contract for the operation that is affected.
 
