@@ -1,6 +1,6 @@
 ---
 name: aot-trimming
-description: Guidelines for making .NET libraries and applications trimming-safe and Native AOT compatible. Covers the trimming/AOT model, the MSBuild properties that enable analysis (IsTrimmable, IsAotCompatible, PublishTrimmed, PublishAot), the trimming attributes (RequiresUnreferencedCode, RequiresDynamicCode, DynamicallyAccessedMembers, UnconditionalSuppressMessage), IL2xxx/IL3xxx warning codes, and a pattern playbook: source generators and UnsafeAccessor, trimming-safe islands and feature switches, migration analyzers, and warning-approval baselines. Use when introducing trimming/AOT support, resolving IL2xxx/IL3xxx warnings, or making reflection-heavy code trimming-safe in C# / .NET codebases.
+description: "Guidelines for making .NET libraries and applications trimming-safe and Native AOT compatible. Covers the trimming/AOT model, the MSBuild properties that enable analysis (IsTrimmable, IsAotCompatible, PublishTrimmed, PublishAot), the trimming attributes (RequiresUnreferencedCode, RequiresDynamicCode, DynamicallyAccessedMembers, UnconditionalSuppressMessage), IL2xxx/IL3xxx warning codes, and a pattern playbook: source generators and UnsafeAccessor, trimming-safe islands and feature switches, migration analyzers, and warning-approval baselines. Use when introducing trimming/AOT support, resolving IL2xxx/IL3xxx warnings, or making reflection-heavy code trimming-safe in C# / .NET codebases. For System.Text.Json AOT scenarios, see also the serialization skill."
 version: 1.0.0
 tags:
   - csharp
