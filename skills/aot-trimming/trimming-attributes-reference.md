@@ -122,9 +122,9 @@ internal const DynamicallyAccessedMemberTypes CreatorMembersRequired =
 
 ## Scoping attributes to property accessors
 
-Trimming attributes do not have to cover a whole property. C# attribute-target specifiers scope them to one part — the setter, the getter, or the backing field — so the rest of the property stays unannotated.
+Trimming attributes do not have to cover a whole property. Placing an attribute directly on an accessor scopes it to one part — the setter, the getter, or the backing field — so the rest of the property stays unannotated.
 
-- `[set: ...]` / `[get: ...]` — the setter/getter method only.
+- Place the attribute directly on the accessor (the setter/getter) — accessors are methods, so the attribute applies to that method only.
 - `[field: ...]` — the backing field only.
 - `[return: ...]` — the return value only (of a method or a getter).
 
@@ -139,13 +139,13 @@ public sealed class ProcessingContext
     {
         get => _payload; // unannotated — reading is safe.
 
-        [set: RequiresUnreferencedCode("Routes by the runtime type of the value, which trimming cannot analyze.")]
+        [RequiresUnreferencedCode("Routes by the runtime type of the value, which trimming cannot analyze.")]
         set => _payload = value;
     }
 }
 ```
 
-`RequiresUnreferencedCode`, `RequiresDynamicCode`, and `UnconditionalSuppressMessage` target methods, so `[get:]`/`[set:]` work (accessors compile to methods). `[return: DynamicallyAccessedMembers(...)]` preserves only the returned `Type`; `[field: DynamicallyAccessedMembers(...)]` puts the requirement on the backing field without touching the property surface.
+`RequiresUnreferencedCode`, `RequiresDynamicCode`, and `UnconditionalSuppressMessage` target methods, so placing them directly on an accessor works (accessors compile to methods). There is no `[set:]`/`[get:]` attribute target in C# — `[set: ...]` produces a CS0658 warning and the attribute is silently ignored. Use the attribute directly on the accessor, or the explicit `[method:]` target. `[return: DynamicallyAccessedMembers(...)]` preserves only the returned `Type`; `[field: DynamicallyAccessedMembers(...)]` puts the requirement on the backing field without touching the property surface.
 
 Rule of thumb: annotate the narrowest part that actually needs it, so callers only get a warning or contract for the operation that is affected.
 

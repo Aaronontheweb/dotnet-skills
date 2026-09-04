@@ -102,7 +102,7 @@ These live in `System.Diagnostics.CodeAnalysis`. See [trimming-attributes-refere
 
 - `[RequiresUnreferencedCode(message)]` — marks code that needs members the linker cannot see. Suppresses warnings *inside*; emits `IL2026` at every call site.
 - `[RequiresDynamicCode(message)]` — marks code that needs a JIT (emitting, dynamic). Emits `IL3050` at call sites.
-- `[DynamicallyAccessedMembers(memberTypes)]` — declares which members of a `Type`/`string` must be preserved. Flows *backward* from the reflection site to the `Type` source. Scope it (and the other attributes) to a single accessor with `[set:]`, `[get:]`, `[field:]`, or `[return:]`.
+- `[DynamicallyAccessedMembers(memberTypes)]` — declares which members of a `Type`/`string` must be preserved. Flows *backward* from the reflection site to the `Type` source. Scope it (and the other attributes) to a single accessor by placing the attribute directly on the accessor, or with the `[method:]`, `[field:]`, or `[return:]` targets.
 - `[UnconditionalSuppressMessage(category, checkId, Justification = "...")]` — last-resort, IL-persisted suppression; must carry a justification and a real invariant.
 - `[DynamicDependency("Member", typeof(T))]` — keeps named members but does **not** silence warnings.
 

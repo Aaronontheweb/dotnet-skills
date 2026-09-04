@@ -390,7 +390,7 @@ public void Process(object value, Type valueType) { /* known logical type, no em
 
 **Shape:**
 
-1. Declare the switch as a static `bool` getter-only property and mark it with `[FeatureSwitchDefinition]` (.NET 10, `System.Diagnostics.CodeAnalysis`). The attribute lets the linker substitute the property's value with the feature-switch setting at trim time:
+1. Declare the switch as a static `bool` getter-only property and mark it with `[FeatureSwitchDefinition]` (.NET 9+, `System.Diagnostics.CodeAnalysis`). The attribute lets the linker substitute the property's value with the feature-switch setting at trim time:
 
 ```csharp
 internal static class FeatureSwitches
@@ -427,7 +427,7 @@ AppContext.SetSwitch("MyLibrary.StrictMode", true);
 
 ```xml
 <!-- App/trim time: Trim="true" lets the linker substitute the value and remove the
-     lenient reflection path when the switch is off. -->
+     lenient reflection path when the switch is on (strict mode). -->
 <ItemGroup>
   <RuntimeHostConfigurationOption Include="MyLibrary.StrictMode" Value="true" Trim="true" />
 </ItemGroup>
@@ -439,7 +439,7 @@ AppContext.SetSwitch("MyLibrary.StrictMode", true);
 - Make failures **actionable** — point at the generated registration, the generic overload, or the explicit `Add<T>()` API that closes the gap.
 - It complements the compile-time analyzer: the analyzer catches what it can see, strict mode catches what it cannot (runtime-discovered types).
 - It only fits when the library already has a registration / compile-time-manifest concept. With nothing to be "strict" about, the pattern does not apply.
-- `[FeatureSwitchDefinition]` is .NET 10 only. On older TFMs, declare the same static `bool` property and read `AppContext.TryGetSwitch` directly — you lose only the trim-time substitution.
+- `[FeatureSwitchDefinition]` is available from .NET 9. On older TFMs, declare the same static `bool` property and read `AppContext.TryGetSwitch` directly — you lose only the trim-time substitution.
 - Feature switches complicate unit testing and code sharing (different app configurations can disagree on the value). Prefer structuring APIs so trimming happens naturally; reserve switches for when API changes are not feasible.
 
 ---
