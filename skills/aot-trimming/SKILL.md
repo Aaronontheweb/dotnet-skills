@@ -1,6 +1,6 @@
 ---
 name: aot-trimming
-description: "Guidelines for making .NET libraries and applications trimming-safe and Native AOT compatible. Covers the trimming/AOT model, the MSBuild properties that enable analysis (IsTrimmable, IsAotCompatible, PublishTrimmed, PublishAot), the trimming attributes (RequiresUnreferencedCode, RequiresDynamicCode, DynamicallyAccessedMembers, UnconditionalSuppressMessage), IL2xxx/IL3xxx warning codes, and a pattern playbook: source generators and UnsafeAccessor, trimming-safe islands and feature switches, migration analyzers, and warning-approval baselines. Use when introducing trimming/AOT support, resolving IL2xxx/IL3xxx warnings, or making reflection-heavy code trimming-safe in C# / .NET codebases. For System.Text.Json AOT scenarios, see also the serialization skill."
+description: "Guidelines for making .NET libraries and applications trimming-safe and Native AOT compatible. Covers the trimming/AOT model, the MSBuild properties that enable analysis (IsTrimmable, IsAotCompatible, PublishTrimmed, PublishAot), the trimming attributes (RequiresUnreferencedCode, RequiresDynamicCode, DynamicallyAccessedMembers, UnconditionalSuppressMessage), IL2xxx/IL3xxx warning codes, and a pattern playbook: source generators and UnsafeAccessor, generated-interception diagnostic suppressors, intentional runtime scanning boundaries, trimming-safe islands and feature switches, migration analyzers, and temporary warning-approval baselines. Use when introducing trimming/AOT support, resolving IL2xxx/IL3xxx warnings, or making reflection-heavy code trimming-safe in C# / .NET codebases. For System.Text.Json AOT scenarios, see also the serialization skill."
 version: 1.0.0
 tags:
   - csharp
@@ -19,7 +19,7 @@ tags:
 - Resolving `IL2xxx` (trimming) and `IL3xxx` (AOT/single-file) warnings
 - Making reflection-heavy code trimming-safe
 - Replacing runtime reflection, assembly scanning, or `Reflection.Emit` with compile-time alternatives
-- Reviewing a codebase or PR for trimming/AOT compatibility
+- Reviewing a codebase or PR for trimming/AOT compatibility, including generated interceptors and analyzer suppressors
 - Designing public APIs that must carry trimming annotations
 
 ## Core Goals
@@ -133,7 +133,7 @@ The goal is never "remove all reflection"; it is *make the reflection statically
 
 - **Suppress only as a last resort** — a single `[UnconditionalSuppressMessage(...)]` at an invariant-proven leaf, with a `Justification`. Never `#pragma` (not persisted in IL).
 
-See [aot-trimming-playbook-reference.md](aot-trimming-playbook-reference.md) for the full playbook, including object-overload → generic-overload redirects, migration analyzers, and warning-approval baselines.
+See [aot-trimming-playbook-reference.md](aot-trimming-playbook-reference.md) for the full playbook, including object-overload → generic-overload redirects, generated-interception suppressors, intentional scanning boundaries, migration analyzers, strict-mode precedence, and temporary warning-approval baselines.
 
 ## Reference Files
 

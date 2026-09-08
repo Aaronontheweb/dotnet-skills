@@ -5,18 +5,20 @@ Patterns for making reflection-heavy .NET code trimming-safe and AOT-compatible,
 ## Contents
 
 1. [Source generators and compile-time registration](#source-generators-and-compile-time-registration)
-2. [DAM on type access and type extensions](#dam-on-type-access-and-type-extensions)
-3. [Unsafe accessors for non-public members](#unsafe-accessors-for-non-public-members)
-4. [Trimming-safe islands](#trimming-safe-islands)
-5. [Separating trimming-unsafe from trimming-safe code](#separating-trimming-unsafe-from-trimming-safe-code)
-6. [System.Text.Json source generation](#systemtextjson-source-generation)
-7. [Migration analyzers](#migration-analyzers)
-8. [Object overloads to generic overloads](#object-overloads-to-generic-overloads)
-9. [Strict-mode feature flag (AppContext switch)](#strict-mode-feature-flag-appcontext-switch)
-10. [Warning-approval baseline](#warning-approval-baseline)
-11. [MSBuild property reference](#msbuild-property-reference)
-12. [Known gotchas](#known-gotchas)
-13. [Full generation checklist](#full-generation-checklist)
+2. [Generated interception and diagnostic suppressors](#generated-interception-and-diagnostic-suppressors)
+3. [Intentional runtime scanning](#intentional-runtime-scanning)
+4. [DAM on type access and type extensions](#dam-on-type-access-and-type-extensions)
+5. [Unsafe accessors for non-public members](#unsafe-accessors-for-non-public-members)
+6. [Trimming-safe islands](#trimming-safe-islands)
+7. [Separating trimming-unsafe from trimming-safe code](#separating-trimming-unsafe-from-trimming-safe-code)
+8. [System.Text.Json source generation](#systemtextjson-source-generation)
+9. [Migration analyzers](#migration-analyzers)
+10. [Object overloads to generic overloads](#object-overloads-to-generic-overloads)
+11. [Strict-mode feature flag (AppContext switch)](#strict-mode-feature-flag-appcontext-switch)
+12. [Warning-approval baseline](#warning-approval-baseline)
+13. [MSBuild property reference](#msbuild-property-reference)
+14. [Known gotchas](#known-gotchas)
+15. [Full generation checklist](#full-generation-checklist)
 
 ---
 
@@ -70,6 +72,34 @@ configuration.AddPlugin<AuditExporter>();
 ```
 
 **JIT fallback variant.** When a library must keep a reflection-based fallback for ordinary JIT applications, keep the fallback but replace it with the generated registration when the generator ran — a `ModuleInitializer`/interceptor swaps in the generated path. The generated path is trimming-safe; the reflection fallback stays for non-trimmed scenarios and carries `[RequiresUnreferencedCode]` where appropriate.
+
+## Generated interception and diagnostic suppressors
+
+A source generator or interceptor can make a call safe by replacing it with a statically generated implementation, while the compiler still reports `IL2026` or `IL3050` for the original invocation. A `DiagnosticSuppressor` is appropriate only when the analyzer can prove that the invocation was intercepted.
+
+- Register separate suppression descriptors for each diagnostic family (`IL2026` and `IL3050`) and use one precise justification such as “the call is intercepted by a statically generated variant.”
+- Match the same syntax and semantic conditions as the generator; do not suppress every warning from a method or compilation.
+- Test both sides: an intercepted call must be suppressed, while an otherwise identical non-intercepted call must still produce the warning. Also test generated output and compilation errors so the suppressor cannot silently hide a broken interception.
+- Do not replace this with `[UnconditionalSuppressMessage]`: that attribute records a code invariant, whereas a suppressor must prove a source-level transformation for each call site.
+
+## Intentional runtime scanning
+
+Some APIs intentionally scan a caller-provided assembly for conventions. Do not pretend that this is trimming-safe: keep `[RequiresUnreferencedCode]` on the public constructor or registration API so callers make the trade-off explicitly. If scanning also constructs runtime-created components or otherwise needs runtime code generation, add `[RequiresDynamicCode]` as well.
+
+Centralize the operation in a small private helper and put the narrowly scoped `[UnconditionalSuppressMessage]` there when the only reachable path is already behind the annotated public API:
+
+```csharp
+[RequiresUnreferencedCode("Scanning the configured assembly is not supported in trimming scenarios.")]
+public ConventionSource(Assembly assembly) => this.assembly = assembly;
+
+[UnconditionalSuppressMessage("Trimming", "IL2026",
+    Justification = "This helper is reachable only through the annotated assembly-scanning API.")]
+static Type[] ScanAssemblyTypes(Assembly assembly) => assembly.GetTypes();
+```
+
+The suppression documents the intentional boundary; it does not make `Assembly.GetTypes()` safe under trimming. Prefer generated registration when the API can offer it.
+
+The same boundary applies to a dispatcher with both typed and runtime-type paths. Keep the typed path clean; isolate the fallback behind a helper and suppress it only when the branch invariant is that it can be reached through an API already marked `[RequiresUnreferencedCode]`. Do not suppress the whole dispatcher, because that would hide warnings from the statically knowable path.
 
 ---
 
@@ -404,17 +434,17 @@ internal static class FeatureSwitches
 2. Gate the strict behavior on it — when on, throw with actionable guidance instead of falling back to reflection:
 
 ```csharp
-public void Register(object handler)
+public void Register(object component)
 {
     if (FeatureSwitches.IsStrictModeEnabled)
     {
         throw new InvalidOperationException(
-            "MyLibrary.StrictMode is enabled, but the handler was not registered through the generated " +
-            "registration. Call Register<THandler>() or add the type to the generated manifest.");
+            "MyLibrary.StrictMode is enabled, but the component was not registered through the generated " +
+            "registration. Call Register<TComponent>() or add the type to the generated manifest.");
     }
 
     // Lenient path: reflection-based fallback for non-trimming scenarios.
-    RegisterViaReflection(handler);
+    RegisterViaReflection(component);
 }
 ```
 
@@ -434,9 +464,10 @@ AppContext.SetSwitch("MyLibrary.StrictMode", true);
 ```
 
 **Guidance:**
+- Strict mode must be the stronger policy: derive effective dynamic loading as `configuredDynamicLoading && !strictMode`, and apply it before registration state or other startup components initialize. Otherwise a permissive setting can re-enable dynamic type loading after strict mode has been requested. Test the precedence explicitly, including registrations made before initialization.
 - Keep it **opt-in** — existing JIT users must see no new failures.
 - Treat it as a **detector, not the safety mechanism**: the actual trimming-safety still comes from generated registration and annotations; strict mode only surfaces the gaps.
-- Make failures **actionable** — point at the generated registration, the generic overload, or the explicit `Add<T>()` API that closes the gap.
+- Make failures **actionable** — point at the generated registration, the generic overload, or the explicit `Register<T>()` API that closes the gap.
 - It complements the compile-time analyzer: the analyzer catches what it can see, strict mode catches what it cannot (runtime-discovered types).
 - It only fits when the library already has a registration / compile-time-manifest concept. With nothing to be "strict" about, the pattern does not apply.
 - `[FeatureSwitchDefinition]` is available from .NET 9. On older TFMs, declare the same static `bool` property and read `AppContext.TryGetSwitch` directly — you lose only the trim-time substitution.
@@ -446,7 +477,7 @@ AppContext.SetSwitch("MyLibrary.StrictMode", true);
 
 ## Warning-approval baseline
 
-**General rule:** on a large codebase that cannot reach zero warnings overnight, lock the *current* warning surface behind an approval test so regressions fail but pre-existing warnings are tracked.
+**General rule:** use an approval baseline only as a migration aid when a large codebase cannot reach zero warnings overnight. Once the warning set is empty, delete the approval test and checked-in warning file; enforce trimming directly through the project analyzers and publish validation. A permanent baseline can hide regressions behind an ever-growing list.
 
 **Shape:**
 
@@ -536,11 +567,12 @@ When introducing trimming/AOT support or resolving warnings:
 
 5. **Suppress minimally**
    - Only `[UnconditionalSuppressMessage]` with a mandatory, invariant-stating justification, at a leaf.
+   - For generated interception, use a narrowly matched `DiagnosticSuppressor` and test intercepted and non-intercepted calls separately.
    - Never `#pragma`/`[SuppressMessage]`.
 
 6. **Verify and lock**
    - Publish trimmed and AOT test apps that root the library (`TrimmerRootAssembly`).
-   - Add a warning-approval baseline so new warnings fail the build.
+   - Use an approval baseline only while migrating; once warnings are resolved, enforce a zero-warning project build and remove the baseline.
    - Add a migration analyzer + code fix when retiring reflective public APIs.
 
 By following these rules, generated and refactored .NET code cooperates with the linker's reachability analysis and runs correctly under Native AOT.
