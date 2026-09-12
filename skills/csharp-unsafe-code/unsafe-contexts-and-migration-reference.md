@@ -1,6 +1,6 @@
 # Unsafe Contexts and Migration Reference
 
-> **Compatibility — source snapshot 2026-08-09.** Use this reference to identify unsafe contexts, diagnose compiler behavior, and migrate declarations, bodies, callers, and assemblies to the updated memory-safety model. Recheck only version-sensitive integration details: the installed SDK's exact opt-in/property spelling, release branding, diagnostic wording/numbers, metadata namespace and tooling behavior, and incomplete library coverage.
+> **Compatibility — source snapshot 2026-09-12.** Use this reference to identify unsafe contexts, diagnose compiler behavior, and migrate declarations, bodies, callers, and assemblies to the updated memory-safety model. Recheck only version-sensitive integration details: the installed SDK's exact opt-in/property spelling, release branding, diagnostic wording/numbers, metadata namespace and tooling behavior, and incomplete library coverage.
 
 ## Contents
 
@@ -19,7 +19,7 @@
 
 ## Compatibility and Terminology
 
-The updated model is the migration target: member `unsafe` expresses a **requires-unsafe** caller contract, implementation operations use explicit unsafe regions, declaration shapes change, and the compiler propagates contracts through metadata. Roslyn implementation and test work plus more than 200 runtime reduce-unsafe changes make those semantics durable enough to guide migrations.
+The updated model is the migration target: member `unsafe` expresses a **requires-unsafe** caller contract, implementation operations use explicit unsafe regions, declaration shapes change, and the compiler propagates contracts through metadata. The Roslyn initial implementation plus more than 200 runtime reduce-unsafe changes make those semantics durable enough to guide migrations, but the Roslyn test plan and follow-up items remain open in the tracking issue, so treat diagnostics and tooling as still moving.
 
 Keep a green legacy build while evaluating them. Record the exact SDK observed, and use that SDK's supported opt-in rather than copying configuration from another version. The compatibility note above lists the integration details that still require rechecking. The active design, compiler, runtime, and SDK links in [Primary Sources](#primary-sources) provide provenance. Older sources may call requires-unsafe **caller-unsafe**.
 
@@ -66,7 +66,7 @@ Map each occurrence and the region that authorizes it:
 | Construct or API | Current-work classification |
 | --- | --- |
 | Pointer types and operations (`T*`, `&`, `*`, `->`, pointer indexing, arithmetic, and conversions) | Pointer declarations and uses generally require a lexical unsafe context. Prove provenance, bounds, lifetime, alignment, and representation independently of compiler acceptance. |
-| `fixed` statements and fixed-size buffers | Require unsafe code support and lexical context. Keep the pin no longer than the synchronous pointer use; a fixed buffer also carries layout and initialization obligations. |
+| `fixed` statements and fixed-size buffers | Require unsafe code support and lexical context. Keep the pin no longer than the synchronous pointer use; a fixed buffer also carries layout and initialization obligations. Where a span view suffices, an `[InlineArray<T>]` struct removes the `fixed`/pointer path, though the replacement can add bounds checks (runtime PRs [#125514](https://github.com/dotnet/runtime/pull/125514), [#125574](https://github.com/dotnet/runtime/pull/125574)). |
 | `stackalloc` | A pointer result requires unsafe context; a `Span<T>`/`ReadOnlySpan<T>` result can be used without one. Bound the allocation and initialize every byte that can be read or exposed in either form. |
 | `sizeof` | Predefined built-in types have safe cases; other unmanaged types require a lexical unsafe context under legacy rules. Do not confuse managed storage size with marshaled native size. |
 | Function pointers (`delegate*`) | Declarations and invocation are unsafe-code work. Verify signature, calling convention, target lifetime, and exception behavior. |
@@ -208,6 +208,12 @@ Treat requires-unsafe as a source/tooling contract and align it across:
 
 Do not strengthen a safe base or interface contract in an implementation. Callers through the base or interface must not lose the safety promise.
 
+### Mark audited-safe declarations
+
+Under the updated model, `safe` is a contextual keyword placed on declarations. It is explicitly required for fields of explicit/extended-layout structs and for `extern` members; runtime CoreLib PR [#131719](https://github.com/dotnet/runtime/pull/131719) applies it there. A `<safety>` documentation comment on a member records that a human audit concluded it stays safe and stops migration tooling from conservatively adding `unsafe` to it.
+
+Neither mechanism is a proof and neither is a runtime guard. `safe` placement must be justified by an audit — the tooling will not invent it — and a `<safety>` comment must be backed by the full invariant proof. The CS9389/CS9392 fixers emit `safe` (rather than `unsafe`) when the declaration carries a `<safety>` element, so an audit recorded in source survives the migration.
+
 ### Classify explicit-layout fields
 
 In explicit or extended layout types, classify each instance field as `safe` or `unsafe`; synthesized backing fields can shift the declaration requirement to an auto-property or field-like event. Treat this syntax and `ExtendedLayout` support as moving. Follow the installed compiler's diagnostics rather than preemptively adding modifiers to production code.
@@ -265,7 +271,7 @@ Newer unsafe-evolution discussions include further async/iterator ergonomics. Tr
 
 Source uses the `unsafe` keyword. The compiler represents requires-unsafe in metadata. Writing `RequiresUnsafeAttribute` directly produces CS9379.
 
-Current runtime source places `RequiresUnsafeAttribute` in `System.Diagnostics.CodeAnalysis`; older design examples used `System.Runtime.CompilerServices`. Recheck the installed reference assemblies and [runtime metadata PR #125721](https://github.com/dotnet/runtime/pull/125721). Never hard-code a namespace, define a polyfill speculatively, or emit the attribute by hand.
+Current runtime source places `RequiresUnsafeAttribute` in `System.Diagnostics.CodeAnalysis`; older design examples used `System.Runtime.CompilerServices`. The runtime attributes work is still tracked open under [#125134](https://github.com/dotnet/runtime/issues/125134), so the final name and namespace are not settled. Recheck the installed reference assemblies and [runtime metadata PR #125721](https://github.com/dotnet/runtime/pull/125721). Never hard-code a namespace, define a polyfill speculatively, or emit the attribute by hand.
 
 The module-level memory-safety rules marker is also compiler/tooling metadata. Let the installed compiler emit it from the recognized opt-in.
 
@@ -379,7 +385,9 @@ Use primary sources in this order:
 - [SDK memory-safety enforcement design](https://github.com/dotnet/designs/blob/main/accepted/2025/memory-safety/sdk-memory-safety-enforcement.md)
 - [Earlier caller-unsafe design](https://github.com/dotnet/designs/blob/main/accepted/2025/memory-safety/caller-unsafe.md)
 - [Runtime metadata PR #125721](https://github.com/dotnet/runtime/pull/125721)
-- [Runtime adoption tracking issue #125800](https://github.com/dotnet/runtime/issues/125800)
+- [Memory Safety v2 Tracking Issue #125800](https://github.com/dotnet/runtime/issues/125800) (open; the updated model previews in .NET 11 RC1, with full adoption tracked under milestone 12.0.0)
+- [Unsafe evolution attributes tracking issue #125134](https://github.com/dotnet/runtime/issues/125134)
+- [CoreLib `safe` placement / `<safety>` audit PR #131719](https://github.com/dotnet/runtime/pull/131719)
 - [Early reference-assembly rules PR #131733](https://github.com/dotnet/runtime/pull/131733)
 - [Roslyn implementation PR #82547](https://github.com/dotnet/roslyn/pull/82547)
 - [Roslyn test plan issue #81207](https://github.com/dotnet/roslyn/issues/81207)

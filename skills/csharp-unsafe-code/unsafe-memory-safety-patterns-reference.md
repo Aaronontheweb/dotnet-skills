@@ -264,7 +264,7 @@ scratch.Clear();
 
 Or use a complete initializer and prove that all elements are assigned before read. Review padding and tail bytes, not only logical fields. Be especially strict under `SkipLocalsInit`; the updated rules may require an unsafe context for uninitialized `stackalloc`.
 
-Bound stack allocations. Reject or switch to pooled/heap storage for attacker-controlled or large lengths to avoid stack exhaustion.
+Bound stack allocations. Reject or switch to pooled/heap storage for attacker-controlled or large lengths to avoid stack exhaustion. Runtime PR [#110864](https://github.com/dotnet/runtime/pull/110864) hardens stackallocs with upper and lower bound checks using `(uint)` casts to handle negative or overflowing lengths.
 
 ## Design Interop and Ownership Boundaries
 
@@ -321,6 +321,7 @@ Make ownership visible:
 - Use `SafeHandle` for owned native handles.
 - Use a disposable owner for native allocations and expose spans only while the owner remains alive.
 - Copy when a callee needs data beyond the borrow lifetime.
+- Prefer a ref-struct/span decoder over a pointer-backed `MemoryManager<T>` (`PointerMemoryManager`) when the data is consumed synchronously; it removes the pointer and lifetime indirection (runtime PRs [#125681](https://github.com/dotnet/runtime/pull/125681), [#125854](https://github.com/dotnet/runtime/pull/125854)).
 
 Do not store a span in heap state, return a ref into an object whose lifetime is not guaranteed, or expose mutable aliases that violate invariants.
 
@@ -364,7 +365,7 @@ Use this decision sequence:
 5. Keep the safe rewrite only when regressions are within the project's accepted budget.
 6. Otherwise retain the measured unsafe path, narrow its scope, and document the proof and benchmark.
 
-Runtime PR [#127539](https://github.com/dotnet/runtime/pull/127539) records UniqueId/XML unsafe-reduction work and the decision to revert some candidate safe rewrites after performance regressions. Use that as evidence to measure, not as permission to keep unreviewed unsafe code.
+Runtime PR [#127539](https://github.com/dotnet/runtime/pull/127539) records UniqueId/XML unsafe-reduction work and the decision to revert some candidate safe rewrites after performance regressions. TextInfo repeats the cycle at a smaller scale: [#122116](https://github.com/dotnet/runtime/pull/122116) reduced unsafe usage and was reverted by [#123692](https://github.com/dotnet/runtime/pull/123692) while [#123667](https://github.com/dotnet/runtime/issues/123667) was investigated. JIT-side follow-ups later absorbed part of that cost: [#127433](https://github.com/dotnet/runtime/pull/127433) excluded `[Intrinsic]` callees from the inliner time budget and [#129397](https://github.com/dotnet/runtime/pull/129397) unpinned locals whose values are provably non-movable. Use all of this as evidence to measure, not as permission to keep unreviewed unsafe code.
 
 ## Avoid Common Unsafe Substitutions
 
@@ -375,6 +376,7 @@ Runtime PR [#127539](https://github.com/dotnet/runtime/pull/127539) records Uniq
 | Use `BitConverter` for a network/file format because it accepts a span. | Use `BinaryPrimitives`; reserve `BitConverter` for explicitly host-endian representations. |
 | Replace `sizeof(T)`, `Unsafe.SizeOf<T>()`, and `Marshal.SizeOf<T>()` interchangeably. | Select managed compiler size, managed storage size, or marshaled native size deliberately; test layout. |
 | Call `Unsafe.AsPointer(ref value)` on movable managed data. | Keep a ref/span, or pin with `fixed` for the complete synchronous pointer use. |
+| Reach for `Unsafe.As` or `Unsafe.Add`/`GetArrayDataReference` before checking whether the JIT already proves the access. | Test the equivalent checked indexing or span operation first; when the JIT proves the access in-bounds it emits identical code with no unsafe (runtime evidence [#122132](https://github.com/dotnet/runtime/pull/122132), [#118655](https://github.com/dotnet/runtime/pull/118655)). |
 | Return or cache a pointer obtained inside `fixed`. | Complete the operation inside the pin, or copy/use explicitly owned stable memory. |
 | Cast arbitrary `nint`/`IntPtr` to a pointer after checking only nonzero. | Validate provenance, lifetime, range, alignment, ownership, and ABI; encapsulate handles with `SafeHandle`. |
 | Leave `stackalloc` partially initialized because only a prefix is expected to be read. | Clear or fully initialize the entire exposed/read region; test tails and padding. |
@@ -383,6 +385,7 @@ Runtime PR [#127539](https://github.com/dotnet/runtime/pull/127539) records Uniq
 | Put a low-level call in a safe wrapper without validating its contract. | Validate every invariant or propagate an honest requires-unsafe contract. |
 | Use broad `#pragma`, `NoWarn`, or disable the updated model. | Resolve each diagnostic by replacement, localization, or propagation; stage only narrow temporary exceptions. |
 | Apply `RequiresUnsafeAttribute` in source or copy a proposal namespace. | Use supported `unsafe` syntax and let the compiler emit metadata. |
+| Add a `safe` placement or a `<safety>` comment without a real audit, or treat them as runtime guards. | Reserve `safe` for the declarations that require it (explicit/extended-layout struct fields, `extern`); back a `<safety>` comment with an actual proof — the tools skip conservative `unsafe`, but the invariant must still hold. |
 | Keep a pointer/span/ref after returning an array or arena block to a pool. | End all borrows before return and prevent callbacks/tasks from retaining them. |
 | Assume reflection, `dynamic`, or a delegate preserves compiler safety contracts. | Validate at runtime boundaries and test indirect invocation paths. |
 | Infer a requires-unsafe or memory-safety risk from an API's name — treating `UnsafeAccessor` like `Unsafe.As`. | Classify by hazard capability using runtime semantics: validated visibility binding fails closed; type-confusion and unchecked-offsetting primitives do not. Verify contract claims against the installed SDK. |
@@ -506,10 +509,18 @@ Use representative runtime PRs as implementation evidence, not universal prescri
 | Pattern | Pull requests |
 | --- | --- |
 | Span slicing and bounded traversal | [#127382](https://github.com/dotnet/runtime/pull/127382), [#127388](https://github.com/dotnet/runtime/pull/127388), [#129625](https://github.com/dotnet/runtime/pull/129625) |
-| Explicit binary/primitive reads and writes | [#127485](https://github.com/dotnet/runtime/pull/127485), [#127913](https://github.com/dotnet/runtime/pull/127913), [#127921](https://github.com/dotnet/runtime/pull/127921), [#127394](https://github.com/dotnet/runtime/pull/127394) |
+| Explicit binary/primitive reads and writes | [#127485](https://github.com/dotnet/runtime/pull/127485), [#127913](https://github.com/dotnet/runtime/pull/127913), [#127921](https://github.com/dotnet/runtime/pull/127921), [#127394](https://github.com/dotnet/runtime/pull/127394), [#125039](https://github.com/dotnet/runtime/pull/125039) |
 | `sizeof` unsafe-reduction evidence on runtime main | [#130727](https://github.com/dotnet/runtime/pull/130727) |
 | Vector creation from spans | [#127456](https://github.com/dotnet/runtime/pull/127456), [#127845](https://github.com/dotnet/runtime/pull/127845), [#127846](https://github.com/dotnet/runtime/pull/127846) |
+| `fixed` buffers replaced with `[InlineArray]` structs | [#125514](https://github.com/dotnet/runtime/pull/125514), [#125574](https://github.com/dotnet/runtime/pull/125574) |
+| `PointerMemoryManager` replaced with ref-struct/span decoders | [#125681](https://github.com/dotnet/runtime/pull/125681), [#125854](https://github.com/dotnet/runtime/pull/125854) |
+| Pointer parsing replaced with span `Parse`/`TryParse` | [#125640](https://github.com/dotnet/runtime/pull/125640), [#102144](https://github.com/dotnet/runtime/pull/102144) |
+| Needless `Unsafe.As` / `GetArrayDataReference` removed | [#118655](https://github.com/dotnet/runtime/pull/118655), [#122132](https://github.com/dotnet/runtime/pull/122132) |
+| Stackalloc bounds hardening | [#110864](https://github.com/dotnet/runtime/pull/110864) |
+| Interop marshalling cleanup | [#118862](https://github.com/dotnet/runtime/pull/118862) |
+| Unsafe-v2 `safe` placement and `<safety>` audit comments | [#131719](https://github.com/dotnet/runtime/pull/131719) |
 | Narrow unavoidable unsafe on downlevel paths | [#114154](https://github.com/dotnet/runtime/pull/114154), [#114490](https://github.com/dotnet/runtime/pull/114490) |
-| Performance-driven retention/reversion | [#127539](https://github.com/dotnet/runtime/pull/127539) |
+| Performance-driven retention/reversion | [#127539](https://github.com/dotnet/runtime/pull/127539); [#122116](https://github.com/dotnet/runtime/pull/122116) reverted by [#123692](https://github.com/dotnet/runtime/pull/123692) |
+| JIT-side cost absorption (inliner budget, unpinning) | [#127433](https://github.com/dotnet/runtime/pull/127433), [#129397](https://github.com/dotnet/runtime/pull/129397) |
 
-Check each PR's merge state, final diff, target branch, benchmark evidence, and later follow-up before copying a pattern. At this snapshot, #127388 is closed without merge; its discussion remains representative but not adopted runtime code.
+Check each PR's merge state, final diff, target branch, benchmark evidence, and later follow-up before copying a pattern. At this snapshot, #127388 is closed without merge; its discussion remains representative but not adopted runtime code. #131719 documents the unsafe-v2 migration surface (`safe` placement and `<safety>` comments), not a runtime technique — recheck the installed compiler's syntax before asserting the exact form. The JIT-side rows are compiler behavior, not source patterns: #127433 excludes `[Intrinsic]` callees from the inliner budget and #129397 unpins locals whose values are provably non-movable, both absorbing cost from span/vector rewrites.
