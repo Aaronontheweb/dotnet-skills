@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.6.0 (2026-09-16)
+
+### New Skills
+
+- **aot-trimming** - A new skill for making .NET libraries and applications trimming-safe and Native AOT compatible. Covers the trimming/AOT model, the MSBuild properties that enable analysis (IsTrimmable, IsAotCompatible, PublishTrimmed, PublishAot), the trimming and reflection-annotation attributes (RequiresUnreferencedCode, RequiresDynamicCode, DynamicallyAccessedMembers, UnconditionalSuppressMessage), IL2xxx/IL3xxx warning codes, and a pattern playbook covering source generators, UnsafeAccessor, generated-interception diagnostic suppressors, intentional runtime scanning boundaries, trimming-safe islands/feature switches, migration analyzers, and temporary warning-approval baselines. ([#82](https://github.com/Aaronontheweb/dotnet-skills/pull/82))
+
 ## v1.5.0 (2026-08-07)
 
 ### New Skills
