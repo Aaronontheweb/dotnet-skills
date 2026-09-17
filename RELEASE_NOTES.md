@@ -1,5 +1,11 @@
 # Release Notes
 
+## Next release
+
+### New Skills
+
+- **sdk-container-publishing** - A new skill for publishing .NET services as container images using the SDK's built-in tooling (`dotnet publish /t:PublishContainer`, `Microsoft.NET.Build.Containers`) with no Dockerfile required. Covers the three output modes (local daemon, tarball archive, registry push), the full `Container*` MSBuild property surface, base-image inference, self-contained and AOT implications, and CI/CD tag-driven publishing. ([#PR](https://github.com/Aaronontheweb/dotnet-skills/pull/0))
+
 ## v1.6.0 (2026-09-16)
 
 ### New Skills
