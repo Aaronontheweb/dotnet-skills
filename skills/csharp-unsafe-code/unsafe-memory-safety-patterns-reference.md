@@ -184,15 +184,20 @@ public static Vector128<byte> ReadVector(ReadOnlySpan<byte> source)
 }
 ```
 
-For looped processing:
+For looped processing, the length guard is the proof that the current span contains one complete vector. `Create(span)` reads its first `Vector128<T>.Count` elements and rejects a shorter span. Slice by exactly that count only after processing so the next iteration starts at the first unprocessed element and the scalar or masked tail remains intact:
 
-1. Guard with `source.Length >= Vector128<T>.Count`.
-2. Create from the current span.
-3. Process the vector.
-4. Slice by exactly `Vector128<T>.Count`.
-5. Handle the tail with a defined scalar or masked path.
+```csharp
+while (source.Length >= Vector128<T>.Count)
+{
+    Vector128<T> vector = Vector128.Create(source);
+    Process(vector);
+    source = source[Vector128<T>.Count..];
+}
 
-Do not assume `Create(span)` is available on every downlevel target, that it accepts short spans, or that it produces the same instruction sequence on every JIT. Representative runtime PRs: [#127456](https://github.com/dotnet/runtime/pull/127456), [#127845](https://github.com/dotnet/runtime/pull/127845), and [#127846](https://github.com/dotnet/runtime/pull/127846).
+ProcessTail(source);
+```
+
+Do not assume `Create(span)` is available on every downlevel target or that it produces the same instruction sequence on every JIT. Runtime PR [#127456](https://github.com/dotnet/runtime/pull/127456) applies this `Create`/exact-`Slice` shape to CRC helpers; its benchmark found no measurable regression, while noting a remaining bounds check before inlining. [#127845](https://github.com/dotnet/runtime/pull/127845) and [#127846](https://github.com/dotnet/runtime/pull/127846) are broader unsafe-reduction examples, not evidence for this exact vector loop.
 
 ## Contain Unavoidable Unsafe Code
 
