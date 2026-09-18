@@ -1,6 +1,6 @@
 # .NET Skills for Claude Code and Codex
 
-A comprehensive AI coding plugin with **30 skills** and **5 specialized agents** for professional .NET development. Battle-tested patterns from production systems covering C#, Akka.NET, Aspire, EF Core, testing, and performance optimization.
+A comprehensive AI coding plugin with **37 skills** and **6 specialized agents** for professional .NET development. Battle-tested patterns from production systems covering C#, Akka.NET, Aspire, EF Core, testing, and performance optimization.
 
 ## Installation
 
@@ -97,7 +97,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pretraining for any .NET work.
 Workflow: skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts.
 
 Routing (invoke by name)
-- C# / code quality: modern-csharp-coding-standards, csharp-concurrency-patterns, api-design, type-design-performance, r3-reactive-extensions
+- C# / code quality: modern-csharp-coding-standards, csharp-concurrency-patterns, csharp-unsafe-code, api-design, type-design-performance, r3-reactive-extensions
 - ASP.NET Core / Web (incl. Aspire): aspire-service-defaults, aspire-integration-testing, transactional-emails
 - Data: efcore-patterns, database-performance
 - DI / config: dependency-injection-patterns, microsoft-extensions-configuration
@@ -121,7 +121,7 @@ Run `./scripts/generate-skill-index-snippets.sh --update-readme` to refresh the 
 |flow:{skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts}
 |route:
 |akka:{akka-net-best-practices,akka-net-testing-patterns,akka-hosting-actor-patterns,akka-net-aspire-configuration,akka-net-management}
-|csharp:{modern-csharp-coding-standards,csharp-concurrency-patterns,csharp-nullable-reference-types,api-design,type-design-performance,r3-reactive-extensions}
+|csharp:{modern-csharp-coding-standards,csharp-concurrency-patterns,csharp-nullable-reference-types,csharp-unsafe-code,api-design,type-design-performance,r3-reactive-extensions}
 |aspnetcore-web:{aspire-integration-testing,aspire-configuration,aspire-service-defaults,mailpit-integration,mjml-email-templates}
 |data:{efcore-patterns,database-performance}
 |di-config:{microsoft-extensions-configuration,dependency-injection-patterns}
@@ -169,6 +169,7 @@ Modern C# patterns for clean, performant code.
 | --------------------------- | ----------------------------------------------------------------------- |
 | **coding-standards**        | Records, pattern matching, nullable types, value objects, no AutoMapper |
 | **concurrency-patterns**    | When to use Task vs Channel vs lock vs actors                           |
+| **unsafe-code**             | Unsafe contexts, memory-safety proofs, safe boundaries, and migration   |
 | **api-design**              | Extend-only design, API/wire compatibility, versioning strategies       |
 | **type-design-performance** | Sealed classes, readonly structs, static pure functions, Span&lt;T&gt;  |
 | **r3-reactive-extensions**  | R3 vs Rx.NET, OnErrorResume, AwaitOperation async dispatch, concurrency, TimeProvider/FrameProvider |
@@ -260,13 +261,14 @@ dotnet-skills/
 ├── .agents/
 │   └── plugins/
 │       └── marketplace.json  # Codex marketplace
-├── agents/                 # 5 specialized agents (Claude Code)
+├── agents/                 # 6 specialized agents (Claude Code)
 │   ├── akka-net-specialist.md
 │   ├── docfx-specialist.md
 │   ├── dotnet-benchmark-designer.md
 │   ├── dotnet-concurrency-specialist.md
-│   └── dotnet-performance-analyst.md
-└── skills/                 # Flat structure (30 skills)
+│   ├── dotnet-performance-analyst.md
+│   └── roslyn-incremental-generator-specialist.md
+└── skills/                 # Flat structure (37 skills)
     ├── akka-best-practices/SKILL.md
     ├── akka-hosting-actor-patterns/SKILL.md
     ├── akka-net-aspire-configuration/SKILL.md
