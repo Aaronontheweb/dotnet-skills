@@ -77,7 +77,7 @@ while (source.Length >= 8)
 
 Keep the step constant and the guard structurally obvious. Avoid repeatedly recomputing end pointers or combining several unchecked offsets. Inspect generated code or benchmark the supported runtimes when the old path relied on bounds-check elimination.
 
-A span rewrite improves local reasoning but may add bounds checks, alter vectorization, or change inlining. Representative runtime work includes [#127382](https://github.com/dotnet/runtime/pull/127382), [#127388](https://github.com/dotnet/runtime/pull/127388), and [#129625](https://github.com/dotnet/runtime/pull/129625). Treat each PR as evidence for a pattern in its specific runtime-main context; note that #127388 closed without merge at this snapshot.
+A span rewrite improves local reasoning but may add bounds checks, alter vectorization, or change inlining. Each indexing or slicing operation carries a range check until the JIT proves the loop guard dominates the access; refactoring can also change the range facts or inlining budget that make that proof visible. Representative runtime work includes [#127382](https://github.com/dotnet/runtime/pull/127382), [#127388](https://github.com/dotnet/runtime/pull/127388), and [#129625](https://github.com/dotnet/runtime/pull/129625). Treat each PR as evidence for a pattern in its specific runtime-main context; note that #127388 closed without merge at this snapshot.
 
 ## Read and Write Binary Representations Explicitly
 
@@ -151,18 +151,18 @@ Do not interchange these operations:
 
 | Operation | Meaning | Constraints and review |
 | --- | --- | --- |
-| `sizeof(T)` | Managed storage size known to the C# compiler for an unmanaged type. | Built-in types have long-standing safe cases. General unmanaged use is legacy-unsafe and relaxed by the updated rules. It does not describe custom marshaling. |
+| `sizeof(T)` | Compiler-defined size of `T`'s managed storage representation. | Built-in types have long-standing safe cases. Under legacy rules, general generic use is limited to unmanaged `T` and requires an unsafe context. Updated compilers may also accept some possibly managed type parameters without one; this is version-sensitive. It does not describe custom marshaling. |
 | `Unsafe.SizeOf<T>()` | Size of `T` as represented in managed storage, exposed through a low-level API. | Does not mean native marshaled size. Audit low-level API contracts and generic/reference-containing cases. |
 | `Marshal.SizeOf<T>()` | Size of the unmanaged representation used by marshaling rules. | Can differ because of layout, packing, character/Boolean marshaling, or custom marshaling; may reject unsupported types. |
 
-An installed compiler implementing the updated rules may allow this without a lexical unsafe context:
+An installed compiler implementing the updated rules may allow an unmanaged generic use without a lexical unsafe context:
 
 ```csharp
 public static int ManagedUnmanagedSize<T>() where T : unmanaged
     => sizeof(T);
 ```
 
-Recheck compiler behavior. Runtime-main PR [#130727](https://github.com/dotnet/runtime/pull/130727) is evidence that runtime source adopted `sizeof` during unsafe-reduction work; it does **not** establish released compiler/API availability for a user's SDK.
+For a possibly managed type parameter, do not infer the same result from this example: compile against every supported SDK and target framework. Runtime-main PR [#130727](https://github.com/dotnet/runtime/pull/130727) is evidence that runtime source adopted `sizeof` during unsafe-reduction work; it does **not** establish released compiler/API availability for a user's SDK.
 
 For native structs, verify `StructLayout`, `FieldOffset`, `Pack`, fixed buffers, nested layout, platform pointer width, and the native compiler's ABI. Add layout tests for every supported architecture when the value crosses an interop boundary.
 
@@ -381,7 +381,7 @@ Runtime PR [#127539](https://github.com/dotnet/runtime/pull/127539) records Uniq
 | Use `BitConverter` for a network/file format because it accepts a span. | Use `BinaryPrimitives`; reserve `BitConverter` for explicitly host-endian representations. |
 | Replace `sizeof(T)`, `Unsafe.SizeOf<T>()`, and `Marshal.SizeOf<T>()` interchangeably. | Select managed compiler size, managed storage size, or marshaled native size deliberately; test layout. |
 | Call `Unsafe.AsPointer(ref value)` on movable managed data. | Keep a ref/span, or pin with `fixed` for the complete synchronous pointer use. |
-| Reach for `Unsafe.As` or `Unsafe.Add`/`GetArrayDataReference` before checking whether the JIT already proves the access. | Test the equivalent checked indexing or span operation first; when the JIT proves the access in-bounds it emits identical code with no unsafe (runtime evidence [#122132](https://github.com/dotnet/runtime/pull/122132), [#118655](https://github.com/dotnet/runtime/pull/118655)). |
+| Reach for `Unsafe.As` or `Unsafe.Add`/`GetArrayDataReference` before checking whether the JIT already proves the access. | Test the equivalent checked indexing or span operation first; the JIT can eliminate bounds checks for a proven in-bounds access. Inspect target code generation and benchmark rather than assuming it matches an unsafe version (runtime evidence [#122132](https://github.com/dotnet/runtime/pull/122132), [#118655](https://github.com/dotnet/runtime/pull/118655)). |
 | Return or cache a pointer obtained inside `fixed`. | Complete the operation inside the pin, or copy/use explicitly owned stable memory. |
 | Cast arbitrary `nint`/`IntPtr` to a pointer after checking only nonzero. | Validate provenance, lifetime, range, alignment, ownership, and ABI; encapsulate handles with `SafeHandle`. |
 | Leave `stackalloc` partially initialized because only a prefix is expected to be read. | Clear or fully initialize the entire exposed/read region; test tails and padding. |
