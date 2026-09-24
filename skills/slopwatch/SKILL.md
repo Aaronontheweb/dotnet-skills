@@ -47,7 +47,7 @@ Add to `.config/dotnet-tools.json`:
   "isRoot": true,
   "tools": {
     "slopwatch.cmd": {
-      "version": "0.2.0",
+      "version": "0.4.2",
       "commands": ["slopwatch"],
       "rollForward": false
     }
@@ -217,49 +217,40 @@ jobs:
 | SW003 | Error | Empty catch blocks that swallow exceptions |
 | SW004 | Warning | Arbitrary delays in tests (`Task.Delay`, `Thread.Sleep`) |
 | SW005 | Warning | Project file slop (`NoWarn`, `TreatWarningsAsErrors=false`) |
-| SW006 | Warning | CPM bypass (`VersionOverride`, inline `Version` attributes) |
+| SW006 | Error | CPM bypass (`VersionOverride`, inline `Version` attributes) |
 
 ---
 
 ## Configuration
 
-Create `.slopwatch/slopwatch.json` to customize:
+Create `.slopwatch/config.json` to suppress a rule for specific paths, with a justification:
 
 ```json
 {
-  "minSeverity": "warning",
-  "rules": {
-    "SW001": { "enabled": true, "severity": "error" },
-    "SW002": { "enabled": true, "severity": "warning" },
-    "SW003": { "enabled": true, "severity": "error" },
-    "SW004": { "enabled": true, "severity": "warning" },
-    "SW005": { "enabled": true, "severity": "warning" },
-    "SW006": { "enabled": true, "severity": "warning" }
-  },
-  "exclude": [
-    "**/Generated/**",
-    "**/obj/**",
-    "**/bin/**"
-  ]
+  "suppressions": [
+    {
+      "ruleId": "SW002",
+      "pattern": "**/Generated/**",
+      "justification": "Generated code from tooling cannot be manually changed"
+    }
+  ],
+  "globalSuppressions": []
 }
+```
+
+Use `-c` or `--config` to point at a config file elsewhere, and `--exclude` to leave paths out of analysis entirely:
+
+```bash
+slopwatch analyze -d . --config path/to/config.json
+slopwatch analyze -d . --exclude "**/Generated/**,**/obj/**,**/bin/**"
 ```
 
 ### Strict Mode (Recommended for LLM Sessions)
 
-For maximum protection during LLM coding sessions, elevate all rules to errors:
+For maximum protection during LLM coding sessions, fail on warnings as well as errors:
 
-```json
-{
-  "minSeverity": "warning",
-  "rules": {
-    "SW001": { "enabled": true, "severity": "error" },
-    "SW002": { "enabled": true, "severity": "error" },
-    "SW003": { "enabled": true, "severity": "error" },
-    "SW004": { "enabled": true, "severity": "error" },
-    "SW005": { "enabled": true, "severity": "error" },
-    "SW006": { "enabled": true, "severity": "error" }
-  }
-}
+```bash
+slopwatch analyze -d . --fail-on warning
 ```
 
 ---

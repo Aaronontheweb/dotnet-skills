@@ -98,7 +98,7 @@ Workflow: skim repo patterns -> consult dotnet-skills by name -> implement small
 
 Routing (invoke by name)
 - C# / code quality: modern-csharp-coding-standards, csharp-concurrency-patterns, api-design, type-design-performance, r3-reactive-extensions
-- ASP.NET Core / Web (incl. Aspire): aspire-service-defaults, aspire-integration-testing, transactional-emails
+- ASP.NET Core / Web (incl. Aspire): aspire-service-defaults, aspire-integration-testing, mailpit-integration, mjml-email-templates, verify-email-snapshots
 - Data: efcore-patterns, database-performance
 - DI / config: dependency-injection-patterns, microsoft-extensions-configuration
 - Testing: testcontainers-integration-tests, playwright-blazor-testing, snapshot-testing
