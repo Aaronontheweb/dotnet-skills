@@ -387,7 +387,7 @@ await Verify(result.Count);  // Just use Assert.Equal(5, result.Count)
 
 ## Integration with MJML Email Testing
 
-See the `aspnetcore/transactional-emails` skill for the complete pattern:
+See the `mjml-email-templates` and `verify-email-snapshots` skills for the complete pattern:
 
 1. MJML templates with `{{variable}}` placeholders
 2. Render to HTML with test data
