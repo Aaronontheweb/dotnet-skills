@@ -2,6 +2,8 @@
 
 Patterns for testing Redis, RabbitMQ, multi-container networks, container reuse, and database reset with Respawn.
 
+Uses the **TestContainers 3.0+ module builders**. See `SKILL.md` for the package list, required usings, and the API migration table.
+
 ## Contents
 
 - [Redis Integration Tests](#redis-integration-tests)
@@ -13,17 +15,18 @@ Patterns for testing Redis, RabbitMQ, multi-container networks, container reuse,
 ## Redis Integration Tests
 
 ```csharp
+using StackExchange.Redis;
+using Testcontainers.Redis;
+using Xunit;
+
 public class RedisTests : IAsyncLifetime
 {
-    private readonly TestcontainersContainer _redisContainer;
+    private readonly RedisContainer _redisContainer;
     private IConnectionMultiplexer _redis;
 
     public RedisTests()
     {
-        _redisContainer = new TestcontainersBuilder<TestcontainersContainer>()
-            .WithImage("redis:alpine")
-            .WithPortBinding(6379, true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(6379))
+        _redisContainer = new RedisBuilder("redis:alpine")
             .Build();
     }
 
@@ -31,8 +34,7 @@ public class RedisTests : IAsyncLifetime
     {
         await _redisContainer.StartAsync();
 
-        var port = _redisContainer.GetMappedPublicPort(6379);
-        _redis = await ConnectionMultiplexer.ConnectAsync($"localhost:{port}");
+        _redis = await ConnectionMultiplexer.ConnectAsync(_redisContainer.GetConnectionString());
     }
 
     public async Task DisposeAsync()
@@ -72,18 +74,20 @@ public class RedisTests : IAsyncLifetime
 ## RabbitMQ Integration Tests
 
 ```csharp
+using RabbitMQ.Client;
+using Testcontainers.RabbitMq;
+using Xunit;
+
 public class RabbitMqTests : IAsyncLifetime
 {
-    private readonly TestcontainersContainer _rabbitContainer;
+    private readonly RabbitMqContainer _rabbitContainer;
     private IConnection _connection;
 
     public RabbitMqTests()
     {
-        _rabbitContainer = new TestcontainersBuilder<TestcontainersContainer>()
-            .WithImage("rabbitmq:management-alpine")
-            .WithPortBinding(5672, true)
-            .WithPortBinding(15672, true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(5672))
+        _rabbitContainer = new RabbitMqBuilder("rabbitmq:management-alpine")
+            .WithUsername("guest")
+            .WithPassword("guest")
             .Build();
     }
 
@@ -91,11 +95,10 @@ public class RabbitMqTests : IAsyncLifetime
     {
         await _rabbitContainer.StartAsync();
 
-        var port = _rabbitContainer.GetMappedPublicPort(5672);
         var factory = new ConnectionFactory
         {
             HostName = "localhost",
-            Port = port,
+            Port = _rabbitContainer.GetMappedPublicPort(5672),
             UserName = "guest",
             Password = "guest"
         };
@@ -148,26 +151,32 @@ public class RabbitMqTests : IAsyncLifetime
 When you need multiple containers to communicate:
 
 ```csharp
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Networks;
+using Testcontainers.PostgreSql;
+using Testcontainers.Redis;
+using Xunit;
+
 public class MultiContainerTests : IAsyncLifetime
 {
     private readonly INetwork _network;
-    private readonly TestcontainersContainer _dbContainer;
-    private readonly TestcontainersContainer _redisContainer;
+    private readonly PostgreSqlContainer _dbContainer;
+    private readonly RedisContainer _redisContainer;
 
     public MultiContainerTests()
     {
-        _network = new TestcontainersNetworkBuilder()
+        _network = new NetworkBuilder()
             .Build();
 
-        _dbContainer = new TestcontainersBuilder<TestcontainersContainer>()
-            .WithImage("postgres:latest")
+        _dbContainer = new PostgreSqlBuilder("postgres:latest")
+            .WithDatabase("testdb")
+            .WithUsername("postgres")
+            .WithPassword("postgres")
             .WithNetwork(_network)
             .WithNetworkAliases("db")
-            .WithEnvironment("POSTGRES_PASSWORD", "postgres")
             .Build();
 
-        _redisContainer = new TestcontainersBuilder<TestcontainersContainer>()
-            .WithImage("redis:alpine")
+        _redisContainer = new RedisBuilder("redis:alpine")
             .WithNetwork(_network)
             .WithNetworkAliases("redis")
             .Build();
@@ -228,25 +237,26 @@ public class FastDatabaseTests
 }
 
 // Shared fixture
+using Microsoft.Data.SqlClient;
+using Testcontainers.MsSql;
+
 public class DatabaseFixture : IAsyncLifetime
 {
-    private readonly TestcontainersContainer _container;
+    private readonly MsSqlContainer _container;
     public IDbConnection Connection { get; private set; }
 
     public DatabaseFixture()
     {
-        _container = new TestcontainersBuilder<TestcontainersContainer>()
-            .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
-            .WithEnvironment("ACCEPT_EULA", "Y")
-            .WithEnvironment("SA_PASSWORD", "Your_password123")
-            .WithPortBinding(1433, true)
+        _container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
+            .WithPassword("Your_password123")
             .Build();
     }
 
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
-        // Setup connection
+        Connection = new SqlConnection(_container.GetConnectionString());
+        await Connection.OpenAsync();
     }
 
     public async Task DisposeAsync()
@@ -271,21 +281,31 @@ When reusing containers, use [Respawn](https://github.com/jbogard/Respawn) to re
 ### Basic Respawn Setup
 
 ```csharp
+using Npgsql;
 using Respawn;
+using Testcontainers.PostgreSql;
 
 public class DatabaseFixture : IAsyncLifetime
 {
-    private readonly TestcontainersContainer _container;
+    private readonly PostgreSqlContainer _container;
     private Respawner _respawner = null!;
     public NpgsqlConnection Connection { get; private set; } = null!;
     public string ConnectionString { get; private set; } = null!;
+
+    public DatabaseFixture()
+    {
+        _container = new PostgreSqlBuilder("postgres:latest")
+            .WithDatabase("testdb")
+            .WithUsername("postgres")
+            .WithPassword("postgres")
+            .Build();
+    }
 
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
 
-        var port = _container.GetMappedPublicPort(5432);
-        ConnectionString = $"Host=localhost;Port={port};Database=testdb;Username=postgres;Password=postgres";
+        ConnectionString = _container.GetConnectionString();
 
         Connection = new NpgsqlConnection(ConnectionString);
         await Connection.OpenAsync();
