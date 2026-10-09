@@ -33,6 +33,7 @@
     "./skills/serialization",
     "./skills/microsoft-extensions-configuration",
     "./skills/microsoft-extensions-dependency-injection",
+    "./skills/cscheck",
     "./skills/testcontainers",
     "./skills/playwright-blazor",
     "./skills/crap-analysis",
