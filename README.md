@@ -101,7 +101,7 @@ Routing (invoke by name)
 - ASP.NET Core / Web (incl. Aspire): aspire-service-defaults, aspire-integration-testing, transactional-emails
 - Data: efcore-patterns, database-performance
 - DI / config: dependency-injection-patterns, microsoft-extensions-configuration
-- Testing: testcontainers-integration-tests, playwright-blazor-testing, snapshot-testing
+- Testing: cscheck, testcontainers-integration-tests, playwright-blazor-testing, snapshot-testing
 
 Quality gates (use when applicable)
 - dotnet-slopwatch: after substantial new/refactor/LLM-authored code
@@ -125,7 +125,7 @@ Run `./scripts/generate-skill-index-snippets.sh --update-readme` to refresh the 
 |aspnetcore-web:{aspire-integration-testing,aspire-configuration,aspire-service-defaults,mailpit-integration,mjml-email-templates}
 |data:{efcore-patterns,database-performance}
 |di-config:{microsoft-extensions-configuration,dependency-injection-patterns}
-|testing:{testcontainers-integration-tests,playwright-blazor-testing,snapshot-testing,verify-email-snapshots,playwright-ci-caching}
+|testing:{cscheck,testcontainers-integration-tests,playwright-blazor-testing,snapshot-testing,verify-email-snapshots,playwright-ci-caching}
 |dotnet:{dotnet-project-structure,dotnet-local-tools,package-management,serialization,dotnet-devcert-trust,ilspy-decompile,opentelemetry-net-instrumentation,aot-trimming}
 |quality-gates:{dotnet-slopwatch,crap-analysis}
 |meta:{marketplace-publishing,skills-index-snippets}
@@ -227,6 +227,7 @@ Comprehensive testing strategies.
 
 | Skill                      | What You'll Learn                                             |
 | -------------------------- | ------------------------------------------------------------- |
+| **cscheck**                | Property generators, model-based tests, native Spec, shrinking and replay |
 | **testcontainers**         | Docker-based integration tests, PostgreSQL, Redis, RabbitMQ   |
 | **playwright-blazor**      | E2E testing for Blazor apps, page objects, async assertions   |
 | **crap-analysis**          | CRAP scores, coverage thresholds, ReportGenerator integration |
