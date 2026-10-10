@@ -31,9 +31,9 @@ Use this skill when:
 5. **CI/CD Compatible** - Works seamlessly in Docker-enabled CI environments
 6. **Port Randomization** - Containers use random ports to avoid conflicts
 
-## TestContainers 3.0+ API
+## TestContainers 4.x API
 
-This skill targets the **TestContainers 3.0+ API** (current: 4.x). The pre-3.0 types were renamed and removed, so code that uses `TestcontainersBuilder<T>` or `TestcontainersContainer` does **not** compile against the modern packages:
+This skill targets **TestContainers 4.x** with the 3.0+ module builder API. The pre-3.0 types were renamed and removed, so code that uses `TestcontainersBuilder<T>` or `TestcontainersContainer` does **not** compile against the modern packages:
 
 | Old (pre-3.0) | New (3.0+) |
 |----------------|------------|
@@ -41,6 +41,8 @@ This skill targets the **TestContainers 3.0+ API** (current: 4.x). The pre-3.0 t
 | `TestcontainersContainer` | `DockerContainer` / module container (e.g. `PostgreSqlContainer`) |
 | `TestcontainersNetworkBuilder` | `NetworkBuilder` |
 | `GetMappedPublicPort(port)` | `GetMappedPublicPort(port)` (still available) |
+
+**Why 4.x and not 3.x?** The module builders did not expose image-taking constructors in Testcontainers 3.0.0. Those constructors (and the deprecation of the parameterless builder constructor) arrived in the 4.x line, so the examples here rely on 4.x behavior. Pin the module packages to a 4.x (or newer) version rather than an unbounded wildcard if you want reproducible builds.
 
 The recommended approach is the **module builders** from the `Testcontainers.<Provider>` packages (see [Required NuGet Packages](#required-nuget-packages)). Each module builder pre-configures the right image, environment variables, ports, and wait strategy for its database or service.
 
@@ -88,11 +90,12 @@ Problems: doesn't test actual SQL queries, misses constraints/indexes, gives fal
 public class OrderRepositoryTests : IAsyncLifetime
 {
     private readonly MsSqlContainer _dbContainer;
-    private IDbConnection _connection;
+    private SqlConnection _connection;
 
     public OrderRepositoryTests()
     {
         _dbContainer = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
+            .WithDatabase("TestDb")
             .WithPassword("Your_password123")
             .Build();
     }

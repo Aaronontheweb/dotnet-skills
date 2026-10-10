@@ -75,6 +75,7 @@ public class RedisTests : IAsyncLifetime
 
 ```csharp
 using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 using Testcontainers.RabbitMq;
 using Xunit;
 
@@ -127,13 +128,14 @@ public class RabbitMqTests : IAsyncLifetime
             routingKey: queueName,
             body: body);
 
-        var consumer = new EventingBasicConsumer(channel);
+        var consumer = new AsyncEventingBasicConsumer(channel);
         var tcs = new TaskCompletionSource<string>();
 
-        consumer.Received += (model, ea) =>
+        consumer.ReceivedAsync += async (model, ea) =>
         {
             var receivedMessage = Encoding.UTF8.GetString(ea.Body.ToArray());
-            tcs.SetResult(receivedMessage);
+            tcs.TrySetResult(receivedMessage);
+            await Task.CompletedTask;
         };
 
         await channel.BasicConsumeAsync(queueName, autoAck: true,
@@ -243,11 +245,12 @@ using Testcontainers.MsSql;
 public class DatabaseFixture : IAsyncLifetime
 {
     private readonly MsSqlContainer _container;
-    public IDbConnection Connection { get; private set; }
+    public SqlConnection Connection { get; private set; }
 
     public DatabaseFixture()
     {
         _container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
+            .WithDatabase("TestDb")
             .WithPassword("Your_password123")
             .Build();
     }

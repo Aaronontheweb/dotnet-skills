@@ -25,6 +25,7 @@ public class SqlServerTests : IAsyncLifetime
     public SqlServerTests()
     {
         _dbContainer = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
+            .WithDatabase("TestDb")
             .WithPassword("Your_password123")
             .Build();
     }
@@ -33,12 +34,9 @@ public class SqlServerTests : IAsyncLifetime
     {
         await _dbContainer.StartAsync();
 
+        // GetConnectionString() targets TestDb (auto-created by the module during StartAsync)
         _db = new SqlConnection(_dbContainer.GetConnectionString());
         await _db.OpenAsync();
-
-        // Create test database
-        await _db.ExecuteAsync("CREATE DATABASE TestDb");
-        await _db.ExecuteAsync("USE TestDb");
 
         // Run schema migrations
         await _db.ExecuteAsync(@"
@@ -156,6 +154,7 @@ public class MigrationTests : IAsyncLifetime
     public MigrationTests()
     {
         _container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
+            .WithDatabase("TestDb")
             .WithPassword("Your_password123")
             .Build();
     }
