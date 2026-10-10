@@ -47,7 +47,7 @@ See the [containerize a .NET app reference](https://learn.microsoft.com/en-us/do
 - **No Docker required to build.** The SDK creates the image itself; a runtime is only needed to run it. See the [SDK publish tutorial](https://learn.microsoft.com/en-us/dotnet/core/containers/sdk-publish).
 - **Image name defaults to `AssemblyName`.** Set `ContainerRepository` to override.
 - **Base image is inferred.** Self-contained projects get `mcr.microsoft.com/dotnet/runtime-deps`, ASP.NET Core gets `dotnet/aspnet`, other apps get `dotnet/runtime`, tagged for the TFM. Since SDK 8.0.200 the inference is size and security aware: musl RIDs pick Alpine variants, `PublishAot=true` picks the chiseled AOT runtime-deps variant. See the [base image inference notes](https://learn.microsoft.com/en-us/dotnet/core/containers/publish-configuration).
-- **The .NET 10 SDK tags images `latest`, not the version.** If your publish relies on the version tag you must set `ContainerImageTag` explicitly. This is a real footgun in CI - see the [pitfalls section below](#tag-drift).
+- **The .NET 10 SDK tags images `latest`, not the version.** If your publish relies on the version tag you must set `ContainerImageTag` explicitly. This is a real footgun in CI - see the [tag drift entry in references/troubleshooting.md](references/troubleshooting.md).
 - **Windows images need an explicit base image.** Microsoft no longer includes Windows variants in the manifest list. To target Windows, set `ContainerBaseImage` to a specific nanoserver tag (for example `mcr.microsoft.com/dotnet/aspnet:8.0-nanoserver-ltsc2022`). See the [Windows note](https://learn.microsoft.com/en-us/dotnet/core/containers/publish-configuration).
 - **Multi-architecture images** come from `ContainerRuntimeIdentifiers` (semicolon-delimited, a subset of `RuntimeIdentifiers`). The output is an OCI image index. Supported from SDK 8.0.405, 9.0.102, and 9.0.2xx onward.
 - **Insecure registries** are passed via the `DOTNET_CONTAINER_INSECURE_REGISTRIES` env var (comma-separated) starting in SDK 9.0.100. Since .NET 8.0.400 the SDK reads standard Docker / Podman config to decide HTTP vs HTTPS.
@@ -95,39 +95,7 @@ If you centralize image settings across a repo, put them in a `Directory.Build.p
 
 ## Troubleshooting
 
-### Tag drift
-
-**Symptom:** Your pipeline publishes an image but you cannot find the version you expect, only `latest`.
-
-**Cause:** The .NET 10 SDK defaults the image tag to `latest`, not to `$(Version)`. `VersionPrefix` stamps the assembly version but not the image tag.
-
-**Fix:** Pass `ContainerImageTag` explicitly in the publish step.
-
-### Wrong image name or registry
-
-**Symptom:** The image pushes somewhere unexpected.
-
-**Cause:** The SDK derives the repository name from `AssemblyName` and pushes to the local daemon by default.
-
-**Fix:** Set `ContainerRepository` and `ContainerRegistry` explicitly.
-
-### `RUN` unavailable
-
-**Symptom:** You need to run a command inside the image and the SDK will not do it.
-
-**Cause:** The SDK tooling cannot execute `RUN` steps without a Dockerfile.
-
-**Fix:** Use a custom base image via `ContainerBaseImage`, or write a Dockerfile.
-
-### No daemon on the build host
-
-**Symptom:** Publishing fails because no Docker / Podman daemon is reachable.
-
-**Cause:** The default output mode pushes to a local daemon, which must be present.
-
-**Fix:** Set `ContainerArchiveOutputPath` to write a tarball instead. No daemon needed.
-
-For more, see [references/troubleshooting.md](references/troubleshooting.md).
+The common failures (tag drift, wrong image name or registry, unavailable `RUN`, no daemon on the build host, insecure registry rejection, parallel-publish races, and multi-target publishing) are covered in depth in [references/troubleshooting.md](references/troubleshooting.md). Ask the reader to consult it rather than duplicating the full text here; the short version is: set `ContainerImageTag` explicitly, set `ContainerRepository` and `ContainerRegistry` explicitly, and use `ContainerArchiveOutputPath` when no daemon is available.
 
 ## Self-Contained and AOT
 

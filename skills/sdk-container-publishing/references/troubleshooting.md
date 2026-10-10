@@ -64,3 +64,19 @@ dotnet publish ... -p:ContainerImageTag=${{ github.ref_name }} /t:PublishContain
 **Cause:** Concurrent container publishes race on shared state.
 
 **Fix:** Set `ContainerPublishInParallel=false`.
+
+## Multi-Target Publishing
+
+**Symptom:** You publish a project that targets several TFMs and only one image comes out, or the publish errors on the second target.
+
+**Cause:** Each TFM is published separately, and the SDK emits a container for each `TargetFramework` by default. If you did not intend per-TFM images, you get a surprise image per framework.
+
+**Fix:** Scope publish to a single TFM, or set `ContainerRuntimeIdentifiers` / a single `TargetFramework` on the `PublishContainer` invocation:
+
+```bash
+dotnet publish src/MyService/MyService.csproj \
+  -p:TargetFramework=net10.0 \
+  /t:PublishContainer
+```
+
+For multi-arch (not multi-TFM) output you want `ContainerRuntimeIdentifiers`, not multiple TFMs — see [references/ci-cd.md](ci-cd.md).

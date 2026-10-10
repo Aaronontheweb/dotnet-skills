@@ -41,8 +41,8 @@ jobs:
 ```
 
 Two things to keep in mind:
-- **`ContainerImageTag` is explicit.** Without it the image lands on `latest` and a release can never be pulled by version.
-- **A daemon step is required** because the default output mode pushes to the local Docker daemon. If you do not want a daemon, use `ContainerArchiveOutputPath` and push the tarball yourself.
+- **`ContainerImageTag` is explicit.** These `-p:` flags are MSBuild container properties passed on the command line; `ContainerImageTag` is what controls the produced image tag. Without it the image lands on `latest` and a release can never be pulled by version.
+- **A daemon step is required** because the default output mode pushes to the local Docker daemon, which depends on the `ContainerArchiveOutputPath` / `ContainerRegistry` properties you set here. If you do not want a daemon, set `ContainerArchiveOutputPath` and push the tarball yourself.
 
 ## Registry Auth
 
@@ -52,7 +52,7 @@ The SDK reads Docker / Podman config to decide HTTP vs HTTPS and to authenticate
 docker login <registry> -u $USER -p ${{ secrets.REGISTRY_TOKEN }}
 ```
 
-For insecure (HTTP) registries, set `DOTNET_CONTAINER_INSECURE_REGISTRIES` to a comma-separated list of domains.
+For insecure (HTTP) registries, set `DOTNET_CONTAINER_INSECURE_REGISTRIES` to a comma-separated list of domains. See the [registry configuration docs](https://learn.microsoft.com/en-us/dotnet/core/containers/registry-authentication) on Microsoft Learn.
 
 ## Centralizing Settings in Directory.Build.props
 
@@ -94,3 +94,22 @@ docker load -i ./images/my-service.tar.gz   # or podman load -i
 ```
 
 This fits security scanning and air-gapped loading workflows.
+
+## Multi-Architecture and Multi-Image Builds
+
+Building for more than one OS / arch (for example `linux-x64`, `linux-arm64` for Apple Silicon) needs no special CI setup beyond the container properties. Set `ContainerRuntimeIdentifiers` to a semicolon-delimited list of RIDs that is a subset of `RuntimeIdentifiers`, and the SDK emits a single multi-arch OCI image index:
+
+```bash
+dotnet publish src/MyService/MyService.csproj \
+  -p:RuntimeIdentifiers=linux-x64;linux-arm64 \
+  -p:ContainerRuntimeIdentifiers=linux-x64;linux-arm64 \
+  /t:PublishContainer
+```
+
+Key points:
+- The RIDs must be a subset of `RuntimeIdentifiers`, or the publish fails.
+- Multi-arch output is always an OCI image index (Docker format is unavailable for it).
+- Multi-arch support requires SDK 8.0.405, 9.0.102, or 9.0.2xx or later.
+- If you instead need several *separate* images (for example an API and an MCP server in one release), keep them as distinct publish steps or projects with their own `ContainerRepository` — the SDK builds one image per project per publish invocation.
+
+See [references/property-reference.md](property-reference.md) for the full `ContainerRuntimeIdentifiers` details.

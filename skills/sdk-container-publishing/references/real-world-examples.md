@@ -60,7 +60,9 @@ Separate deployables (for example an API and an MCP server) each get their own p
 
 ## Centralized Settings in Directory.Build.props
 
-A monorepo centralizes image settings. The props file keys off `CI` and `AGENT_ID` so the same repo builds correctly in GitHub Actions and on build agents:
+A monorepo centralizes image settings. The props file keys off `CI` and `AGENT_ID` so the same repo builds correctly in GitHub Actions and on build agents.
+
+The `CI` environment variable is a de-facto convention set to `true` by default on GitHub Actions, Azure DevOps, GitLab CI, CircleCI, and Buildkite (among others). Set `Condition=" '$(CI)' == 'true' "` on the container settings group and those settings only apply on a CI runner, never during a developer's local build — which is why the `AGENT_ID`-style triggers are guarded the same way. If your runner does not define `CI`, pass it explicitly as a build input.
 
 ```xml
 <PropertyGroup Label="ContainerSettings" Condition=" '$(CI)' == 'true' ">

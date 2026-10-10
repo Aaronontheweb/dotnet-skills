@@ -22,7 +22,7 @@ Grouped by what each property controls. The authoritative source is the [contain
 
 | Property | What it does |
 |----------|--------------|
-| `ContainerBaseImage` | Pin an explicit base image instead of the inferred default. Required for Windows targets. |
+| `ContainerBaseImage` | Pin an explicit base image instead of the inferred default. Required for Windows containers, because Microsoft stopped shipping Windows variants in the manifest list for .NET 8+. See the [Windows container note](https://learn.microsoft.com/en-us/dotnet/core/containers/publish-configuration). |
 | `ContainerFamily` | Base image family. |
 | `ContainerRuntimeIdentifiers` | Selects OS / arch variants from the base image manifest list. |
 
@@ -59,7 +59,7 @@ Grouped by what each property controls. The authoritative source is the [contain
 
 ## Base Image Inference
 
-The SDK picks a base image when `ContainerBaseImage` is unset:
+The SDK picks a base image when `ContainerBaseImage` is unset. See the [base image inference docs](https://learn.microsoft.com/en-us/dotnet/core/containers/publish-configuration):
 
 | Scenario | Base image |
 |----------|------------|
