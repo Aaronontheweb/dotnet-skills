@@ -2,6 +2,8 @@
 
 Full code examples for testing with SQL Server, PostgreSQL, and database migrations using TestContainers.
 
+Uses the **TestContainers 3.0+ module builders**. See `SKILL.md` for the package list, required usings, and the API migration table.
+
 ## Contents
 
 - [SQL Server Integration Tests](#sql-server-integration-tests)
@@ -11,22 +13,20 @@ Full code examples for testing with SQL Server, PostgreSQL, and database migrati
 ## SQL Server Integration Tests
 
 ```csharp
-using Testcontainers;
+using Microsoft.Data.SqlClient;
+using Testcontainers.MsSql;
 using Xunit;
 
 public class SqlServerTests : IAsyncLifetime
 {
-    private readonly TestcontainersContainer _dbContainer;
-    private IDbConnection _db;
+    private readonly MsSqlContainer _dbContainer;
+    private SqlConnection _db;
 
     public SqlServerTests()
     {
-        _dbContainer = new TestcontainersBuilder<TestcontainersContainer>()
-            .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
-            .WithEnvironment("ACCEPT_EULA", "Y")
-            .WithEnvironment("SA_PASSWORD", "Your_password123")
-            .WithPortBinding(1433, true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(1433))
+        _dbContainer = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
+            .WithDatabase("TestDb")
+            .WithPassword("Your_password123")
             .Build();
     }
 
@@ -34,15 +34,9 @@ public class SqlServerTests : IAsyncLifetime
     {
         await _dbContainer.StartAsync();
 
-        var port = _dbContainer.GetMappedPublicPort(1433);
-        var connectionString = $"Server=localhost,{port};Database=master;User Id=sa;Password=Your_password123;TrustServerCertificate=true";
-
-        _db = new SqlConnection(connectionString);
+        // GetConnectionString() targets TestDb (auto-created by the module during StartAsync)
+        _db = new SqlConnection(_dbContainer.GetConnectionString());
         await _db.OpenAsync();
-
-        // Create test database
-        await _db.ExecuteAsync("CREATE DATABASE TestDb");
-        await _db.ExecuteAsync("USE TestDb");
 
         // Run schema migrations
         await _db.ExecuteAsync(@"
@@ -84,19 +78,21 @@ public class SqlServerTests : IAsyncLifetime
 ## PostgreSQL Integration Tests
 
 ```csharp
+using Npgsql;
+using Testcontainers.PostgreSql;
+using Xunit;
+
 public class PostgreSqlTests : IAsyncLifetime
 {
-    private readonly TestcontainersContainer _dbContainer;
+    private readonly PostgreSqlContainer _dbContainer;
     private NpgsqlConnection _connection;
 
     public PostgreSqlTests()
     {
-        _dbContainer = new TestcontainersBuilder<TestcontainersContainer>()
-            .WithImage("postgres:latest")
-            .WithEnvironment("POSTGRES_PASSWORD", "postgres")
-            .WithEnvironment("POSTGRES_DB", "testdb")
-            .WithPortBinding(5432, true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(5432))
+        _dbContainer = new PostgreSqlBuilder("postgres:latest")
+            .WithDatabase("testdb")
+            .WithUsername("postgres")
+            .WithPassword("postgres")
             .Build();
     }
 
@@ -104,10 +100,7 @@ public class PostgreSqlTests : IAsyncLifetime
     {
         await _dbContainer.StartAsync();
 
-        var port = _dbContainer.GetMappedPublicPort(5432);
-        var connectionString = $"Host=localhost;Port={port};Database=testdb;Username=postgres;Password=postgres";
-
-        _connection = new NpgsqlConnection(connectionString);
+        _connection = new NpgsqlConnection(_dbContainer.GetConnectionString());
         await _connection.OpenAsync();
 
         // Create schema
@@ -149,24 +142,27 @@ public class PostgreSqlTests : IAsyncLifetime
 ## Testing Migrations with Real Databases
 
 ```csharp
+using Microsoft.Data.SqlClient;
+using Testcontainers.MsSql;
+using Xunit;
+
 public class MigrationTests : IAsyncLifetime
 {
-    private readonly TestcontainersContainer _container;
+    private readonly MsSqlContainer _container;
     private string _connectionString;
+
+    public MigrationTests()
+    {
+        _container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
+            .WithDatabase("TestDb")
+            .WithPassword("Your_password123")
+            .Build();
+    }
 
     public async Task InitializeAsync()
     {
-        _container = new TestcontainersBuilder<TestcontainersContainer>()
-            .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
-            .WithEnvironment("ACCEPT_EULA", "Y")
-            .WithEnvironment("SA_PASSWORD", "Your_password123")
-            .WithPortBinding(1433, true)
-            .Build();
-
         await _container.StartAsync();
-
-        var port = _container.GetMappedPublicPort(1433);
-        _connectionString = $"Server=localhost,{port};Database=TestDb;User Id=sa;Password=Your_password123;TrustServerCertificate=true";
+        _connectionString = _container.GetConnectionString();
     }
 
     [Fact]

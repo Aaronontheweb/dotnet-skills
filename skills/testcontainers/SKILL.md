@@ -31,6 +31,31 @@ Use this skill when:
 5. **CI/CD Compatible** - Works seamlessly in Docker-enabled CI environments
 6. **Port Randomization** - Containers use random ports to avoid conflicts
 
+## TestContainers 4.x API
+
+This skill targets **TestContainers 4.x** with the 3.0+ module builder API. The pre-3.0 types were renamed and removed, so code that uses `TestcontainersBuilder<T>` or `TestcontainersContainer` does **not** compile against the modern packages:
+
+| Old (pre-3.0) | New (3.0+) |
+|----------------|------------|
+| `new TestcontainersBuilder<T>()` | Module builder (e.g. `new PostgreSqlBuilder(...)`) or `new ContainerBuilder(...)` |
+| `TestcontainersContainer` | `DockerContainer` / module container (e.g. `PostgreSqlContainer`) |
+| `TestcontainersNetworkBuilder` | `NetworkBuilder` |
+| `GetMappedPublicPort(port)` | `GetMappedPublicPort(port)` (still available) |
+
+**Why 4.x and not 3.x?** The module builders did not expose image-taking constructors in Testcontainers 3.0.0. Those constructors (and the deprecation of the parameterless builder constructor) arrived in the 4.x line, so the examples here rely on 4.x behavior. Pin the module packages to a 4.x (or newer) version rather than an unbounded wildcard if you want reproducible builds.
+
+The recommended approach is the **module builders** from the `Testcontainers.<Provider>` packages (see [Required NuGet Packages](#required-nuget-packages)). Each module builder pre-configures the right image, environment variables, ports, and wait strategy for its database or service.
+
+Pass the image to the builder **constructor** (not via `.WithImage()`) to avoid the obsolete parameterless constructor:
+
+```csharp
+var container = new PostgreSqlBuilder("postgres:latest")
+    .WithDatabase("testdb")
+    .WithUsername("postgres")
+    .WithPassword("postgres")
+    .Build();
+```
+
 ## Why TestContainers Over Mocks?
 
 ### The Problem with Mocking Infrastructure
@@ -64,25 +89,21 @@ Problems: doesn't test actual SQL queries, misses constraints/indexes, gives fal
 // GOOD: Testing against a real database
 public class OrderRepositoryTests : IAsyncLifetime
 {
-    private readonly TestcontainersContainer _dbContainer;
-    private IDbConnection _connection;
+    private readonly MsSqlContainer _dbContainer;
+    private SqlConnection _connection;
 
     public OrderRepositoryTests()
     {
-        _dbContainer = new TestcontainersBuilder<TestcontainersContainer>()
-            .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
-            .WithEnvironment("ACCEPT_EULA", "Y")
-            .WithEnvironment("SA_PASSWORD", "Your_password123")
-            .WithPortBinding(1433, true)
+        _dbContainer = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
+            .WithDatabase("TestDb")
+            .WithPassword("Your_password123")
             .Build();
     }
 
     public async Task InitializeAsync()
     {
         await _dbContainer.StartAsync();
-        var port = _dbContainer.GetMappedPublicPort(1433);
-        var connectionString = $"Server=localhost,{port};Database=TestDb;User Id=sa;Password=Your_password123;TrustServerCertificate=true";
-        _connection = new SqlConnection(connectionString);
+        _connection = new SqlConnection(_dbContainer.GetConnectionString());
         await _connection.OpenAsync();
         await RunMigrationsAsync(_connection);
     }
@@ -115,16 +136,25 @@ See [infrastructure-patterns.md](infrastructure-patterns.md) for Redis, RabbitMQ
 
 ## Required NuGet Packages
 
+Use the **module packages** — one per provider. They replace the special-casing you'd otherwise write against the core `Testcontainers` package:
+
 ```xml
 <ItemGroup>
+  <!-- Core TestContainers -->
   <PackageReference Include="Testcontainers" Version="*" />
+
+  <!-- Provider modules -->
+  <PackageReference Include="Testcontainers.MsSql" Version="*" />
+  <PackageReference Include="Testcontainers.PostgreSql" Version="*" />
+  <PackageReference Include="Testcontainers.Redis" Version="*" />
+  <PackageReference Include="Testcontainers.RabbitMq" Version="*" />
+
   <PackageReference Include="xunit" Version="*" />
   <PackageReference Include="xunit.runner.visualstudio" Version="*" />
 
-  <!-- Database-specific packages -->
+  <!-- Database drivers -->
   <PackageReference Include="Microsoft.Data.SqlClient" Version="*" />
   <PackageReference Include="Npgsql" Version="*" /> <!-- For PostgreSQL -->
-  <PackageReference Include="MySqlConnector" Version="*" /> <!-- For MySQL -->
 
   <!-- Other infrastructure -->
   <PackageReference Include="StackExchange.Redis" Version="*" /> <!-- For Redis -->
@@ -132,10 +162,23 @@ See [infrastructure-patterns.md](infrastructure-patterns.md) for Redis, RabbitMQ
 </ItemGroup>
 ```
 
+## Required Usings
+
+The module builders and container types live in provider-specific namespaces. The base types (`ContainerBuilder`, `NetworkBuilder`, `Wait`) live in `DotNet.Testcontainers.Builders`, and `INetwork` lives in `DotNet.Testcontainers.Networks`:
+
+```csharp
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Networks;
+using Testcontainers.MsSql;
+using Testcontainers.PostgreSql;
+using Testcontainers.Redis;
+using Testcontainers.RabbitMq;
+```
+
 ## Best Practices
 
 1. **Always Use IAsyncLifetime** - Proper async setup and teardown
-2. **Wait for Port Availability** - Use `WaitStrategy` to ensure containers are ready
+2. **Wait for Port Availability** - Use a `Wait` strategy to ensure containers are ready
 3. **Use Random Ports** - Let TestContainers assign ports automatically
 4. **Clean Data Between Tests** - Either use fresh containers or truncate tables
 5. **Reuse Containers When Possible** - Faster than creating new ones for each test
@@ -150,17 +193,19 @@ See [infrastructure-patterns.md](infrastructure-patterns.md) for Redis, RabbitMQ
 ### Container Startup Timeout
 
 ```csharp
-_container = new TestcontainersBuilder<TestcontainersContainer>()
-    .WithImage("postgres:latest")
+_container = new PostgreSqlBuilder("postgres:latest")
+    .WithDatabase("testdb")
+    .WithUsername("postgres")
+    .WithPassword("postgres")
     .WithWaitStrategy(Wait.ForUnixContainer()
-        .UntilPortIsAvailable(5432)
-        .WithTimeout(TimeSpan.FromMinutes(2)))
+        .UntilInternalTcpPortIsAvailable(5432, w => w.WithTimeout(TimeSpan.FromMinutes(2))))
     .Build();
 ```
 
 ### Port Already in Use
 
-Always use random port mapping:
+Always use random port mapping. Module builders handle this by default, but the core container builder exposes it explicitly:
+
 ```csharp
 .WithPortBinding(5432, true) // true = assign random public port
 ```
@@ -168,6 +213,7 @@ Always use random port mapping:
 ### Containers Not Cleaning Up
 
 Ensure proper disposal:
+
 ```csharp
 public async Task DisposeAsync()
 {
@@ -179,6 +225,7 @@ public async Task DisposeAsync()
 ### Tests Fail in CI But Pass Locally
 
 Ensure CI has Docker support:
+
 ```yaml
 # GitHub Actions
 runs-on: ubuntu-latest # Has Docker pre-installed
