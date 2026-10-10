@@ -1,10 +1,18 @@
 # Release Notes
 
-## Next release
+## v1.7.0 (2026-10-10)
 
 ### New Skills
 
 - **sdk-container-publishing** - A new skill for publishing .NET services as container images using the SDK's built-in tooling (`dotnet publish /t:PublishContainer`, `Microsoft.NET.Build.Containers`) with no Dockerfile required. Covers the three output modes (local daemon, tarball archive, registry push), the full `Container*` MSBuild property surface, base-image inference, self-contained and AOT implications, and CI/CD tag-driven publishing. ([#85](https://github.com/Aaronontheweb/dotnet-skills/pull/85))
+- **cscheck** - A new CsCheck skill with progressive examples and verified APIs. ([#90](https://github.com/Aaronontheweb/dotnet-skills/pull/90))
+
+### Improvements
+
+- **testcontainers** - Migrated the skill to the TestContainers 3.0+/4.x module builder API (`MsSqlBuilder`, `PostgreSqlBuilder`, `RedisBuilder`, `RabbitMqBuilder`, `NetworkBuilder`), with the image passed to the constructor, module container types exposing `GetConnectionString()`, and a pre-3.0 to 3.0+ migration table. Existing examples that used `TestcontainersBuilder`/`TestcontainersContainer` no longer compiled against current packages. ([#91](https://github.com/Aaronontheweb/dotnet-skills/pull/91))
+- **slopwatch** - Brought the skill in line with the tool and fixed two leftovers. ([#88](https://github.com/Aaronontheweb/dotnet-skills/pull/88))
+- **user-invocable** - Used `user-invocable` as the key that Claude Code and Copilot read, replacing the prior `invocable` frontmatter key across all skills. ([#87](https://github.com/Aaronontheweb/dotnet-skills/pull/87))
+- **marketplace** - Updated the plugin marketplace command URL. ([#84](https://github.com/Aaronontheweb/dotnet-skills/pull/84))
 
 ## v1.6.0 (2026-09-16)
 
