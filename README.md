@@ -44,6 +44,21 @@ Skills are auto-discovered from the plugin's `skills/` directory. Invoke one wit
 
 [Official Docs](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills)
 
+Run these commands:
+
+```bash
+/plugin marketplace add https://github.com/Aaronontheweb/dotnet-skills
+/plugin install dotnet-skills@dotnet-skills
+```
+
+To update:
+
+```bash
+/plugin update dotnet-skills@dotnet-skills
+```
+
+Alternatively:
+
 Clone or copy skills to your project or global config:
 
 **Project-level** (recommended):
