@@ -73,6 +73,21 @@ if [ -f "$CLAUDE_PLUGIN_JSON" ]; then
     fi
 fi
 
+# The Claude marketplace catalog (.claude-plugin/marketplace.json) embeds a
+# display-only per-plugin version. Keep it in lockstep with the Claude plugin
+# manifest so Claude Code never shows a stale version when browsing.
+CLAUDE_MARKETPLACE_JSON="$REPO_ROOT/.claude-plugin/marketplace.json"
+if [ -f "$CLAUDE_MARKETPLACE_JSON" ]; then
+    marketplace_version=$(jq -r '.plugins[0].version // empty' "$CLAUDE_MARKETPLACE_JSON")
+    if [ -n "$marketplace_version" ] && [ -n "${claude_version:-}" ] && [ "$marketplace_version" != "$claude_version" ]; then
+        echo -e "${RED}ERROR: .claude-plugin/marketplace.json version '$marketplace_version' != .claude-plugin/plugin.json version '$claude_version'${NC}"
+        echo -e "${RED}       Run ./scripts/bump-version.sh to bump all manifests in lockstep.${NC}"
+        ((++errors))
+    else
+        echo -e "${GREEN}Marketplace version lockstep OK: $marketplace_version${NC}"
+    fi
+fi
+
 # Check skills directory reference
 echo ""
 echo "Checking skills..."
