@@ -86,6 +86,25 @@ if [ -f "$CLAUDE_MARKETPLACE_JSON" ]; then
     else
         echo -e "${GREEN}Marketplace version lockstep OK: $marketplace_version${NC}"
     fi
+
+    # The marketplace description advertises the plugin's skill/agent counts.
+    # Fail when the embedded counts drift from the Claude manifest.
+    if [ -f "$CLAUDE_PLUGIN_JSON" ]; then
+        marketplace_desc=$(jq -r '.plugins[0].description // empty' "$CLAUDE_MARKETPLACE_JSON")
+        if [[ "$marketplace_desc" =~ with\ ([0-9]+)\ skills\ and\ ([0-9]+)\ specialized\ agents ]]; then
+            desc_skills="${BASH_REMATCH[1]}"
+            desc_agents="${BASH_REMATCH[2]}"
+            manifest_skills=$(jq '.skills | length' "$CLAUDE_PLUGIN_JSON")
+            manifest_agents=$(jq '.agents | length' "$CLAUDE_PLUGIN_JSON")
+            if [ "$desc_skills" != "$manifest_skills" ] || [ "$desc_agents" != "$manifest_agents" ]; then
+                echo -e "${RED}ERROR: .claude-plugin/marketplace.json description says '$desc_skills skills / $desc_agents agents' but .claude-plugin/plugin.json has '$manifest_skills skills / $manifest_agents agents'${NC}"
+                echo -e "${RED}       Run ./scripts/bump-version.sh to refresh the counts.${NC}"
+                ((++errors))
+            else
+                echo -e "${GREEN}Marketplace description counts OK: $desc_skills skills / $desc_agents agents${NC}"
+            fi
+        fi
+    fi
 fi
 
 # Check skills directory reference
