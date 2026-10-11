@@ -49,6 +49,26 @@ if [ -f "$CLAUDE_MARKETPLACE_JSON" ]; then
     jq --arg v "$NEW_VERSION" '.plugins[0].version = $v' "$CLAUDE_MARKETPLACE_JSON" > "$CLAUDE_MARKETPLACE_JSON.tmp" && mv "$CLAUDE_MARKETPLACE_JSON.tmp" "$CLAUDE_MARKETPLACE_JSON"
     echo "Bumped .claude-plugin/marketplace.json: $OLD_MKTVERSION -> $NEW_VERSION"
   fi
+
+  # Derive the catalog description's skill/agent counts from the Claude
+  # manifest so the marketplace never advertises stale numbers. Only rewrites
+  # when the description uses the expected "with N skills and M specialized
+  # agents" template; hand-written descriptions pass through untouched.
+  CLAUDE_PLUGIN_JSON="$REPO_ROOT/.claude-plugin/plugin.json"
+  if [ -f "$CLAUDE_PLUGIN_JSON" ]; then
+    SKILL_COUNT=$(jq '.skills | length' "$CLAUDE_PLUGIN_JSON")
+    AGENT_COUNT=$(jq '.agents | length' "$CLAUDE_PLUGIN_JSON")
+    OLD_DESC=$(jq -r '.plugins[0].description // empty' "$CLAUDE_MARKETPLACE_JSON")
+    if [ -n "$OLD_DESC" ]; then
+      NEW_DESC=$(jq -r --argjson s "$SKILL_COUNT" --argjson a "$AGENT_COUNT" \
+        '.plugins[0].description | select(. != null) | sub("with [0-9]+ skills and [0-9]+ specialized agents"; "with \($s) skills and \($a) specialized agents")' \
+        "$CLAUDE_MARKETPLACE_JSON")
+      if [ -n "$NEW_DESC" ] && [ "$NEW_DESC" != "$OLD_DESC" ]; then
+        jq --arg d "$NEW_DESC" '.plugins[0].description = $d' "$CLAUDE_MARKETPLACE_JSON" > "$CLAUDE_MARKETPLACE_JSON.tmp" && mv "$CLAUDE_MARKETPLACE_JSON.tmp" "$CLAUDE_MARKETPLACE_JSON"
+        echo "Updated .claude-plugin/marketplace.json description counts: $SKILL_COUNT skills / $AGENT_COUNT agents"
+      fi
+    fi
+  fi
 fi
 
 echo ""
