@@ -9,13 +9,17 @@ description: Common failures when publishing SDK-built container images and how 
 
 **Symptom:** Your pipeline publishes an image but you cannot find the version you expect, only `latest`.
 
-**Cause:** The .NET 10 SDK defaults the image tag to `latest`, not to `$(Version)`. `VersionPrefix` stamps the assembly version but not the image tag.
+**Cause:** Since .NET 8, when neither `ContainerImageTag` nor `ContainerImageTags` is set, the SDK tags the image `latest` instead of `$(Version)`. `VersionPrefix` stamps the assembly version but not the image tag.
 
-**Fix:** Pass `ContainerImageTag` explicitly in the publish step:
+**Fix:** Set `ContainerImageTag` (single tag) or `ContainerImageTags` (list) explicitly in the publish step. Never set both.
 
-```bash
-dotnet publish ... -p:ContainerImageTag=${{ github.ref_name }} /t:PublishContainer
-```
+## VersionPrefix Ordering
+
+**Symptom:** Your project sets `<ContainerImageTags>$(VersionPrefix);latest</ContainerImageTags>`, but the image is tagged `latest` only — the version tag is missing.
+
+**Cause:** `$(VersionPrefix)` is still empty when the project body evaluates, so the list becomes `;latest`. The SDK applies its `1.0.0` default in targets imported *after* the project body.
+
+**Fix:** Provide `VersionPrefix` before the project body: on the command line (`-p:VersionPrefix=...`), in `Directory.Build.props`, or earlier in the project file. A plain local publish without any of those tags the image `latest` only.
 
 ## Wrong Image Name or Registry
 
@@ -37,9 +41,9 @@ dotnet publish ... -p:ContainerImageTag=${{ github.ref_name }} /t:PublishContain
 
 **Symptom:** Publishing fails because no Docker / Podman daemon is reachable.
 
-**Cause:** The default output mode pushes to a local daemon, which must be present.
+**Cause:** The default output mode pushes to a local daemon, which must be present. A registry push (`ContainerRegistry`) does not need a daemon.
 
-**Fix:** Set `ContainerArchiveOutputPath` to write a tarball instead. No daemon needed.
+**Fix:** Set `ContainerArchiveOutputPath` to write a tarball instead, or push to a registry. No daemon needed for either.
 
 ## Property Name Confusion
 
@@ -57,21 +61,21 @@ dotnet publish ... -p:ContainerImageTag=${{ github.ref_name }} /t:PublishContain
 
 **Fix:** Set `DOTNET_CONTAINER_INSECURE_REGISTRIES` to a comma-separated list of domains (SDK 9.0.100+), or configure the registry in Docker / Podman config (SDK 8.0.400+ reads it to decide HTTP vs HTTPS).
 
-## Parallel Publish Race
+## Multi-RID Publish Race
 
-**Symptom:** Multiple projects publishing containers in one build occasionally fail or step on each other.
+**Symptom:** A multi-arch publish (`ContainerRuntimeIdentifiers`) with several RIDs occasionally fails or steps on itself.
 
-**Cause:** Concurrent container publishes race on shared state.
+**Cause:** The SDK publishes the per-RID images in parallel by default, which can race for some project types (for example Blazor WebAssembly).
 
-**Fix:** Set `ContainerPublishInParallel=false`.
+**Fix:** Set `ContainerPublishInParallel=false`. Note this only serializes the inner per-RID publishes of one multi-RID build; it does not serialize publishes across separate projects.
 
 ## Multi-Target Publishing
 
-**Symptom:** You publish a project that targets several TFMs and only one image comes out, or the publish errors on the second target.
+**Symptom:** You run `dotnet publish /t:PublishContainer` on a project with `<TargetFrameworks>` and it fails before any container work.
 
-**Cause:** Each TFM is published separately, and the SDK emits a container for each `TargetFramework` by default. If you did not intend per-TFM images, you get a surprise image per framework.
+**Cause:** The SDK cannot publish containers for multiple target frameworks at once. A project with several TFMs fails with `NETSDK1129` (Publish needs a target framework), and the container targets add their own guard (`CONTAINERS0666`). The SDK does not emit one image per TFM.
 
-**Fix:** Scope publish to a single TFM, or set `ContainerRuntimeIdentifiers` / a single `TargetFramework` on the `PublishContainer` invocation:
+**Fix:** Pick a single framework for the publish:
 
 ```bash
 dotnet publish src/MyService/MyService.csproj \
@@ -79,4 +83,4 @@ dotnet publish src/MyService/MyService.csproj \
   /t:PublishContainer
 ```
 
-For multi-arch (not multi-TFM) output you want `ContainerRuntimeIdentifiers`, not multiple TFMs — see [references/ci-cd.md](ci-cd.md).
+One publish builds one image. For multi-arch (not multi-TFM) output you want `ContainerRuntimeIdentifiers`, not multiple TFMs — see [references/ci-cd.md](ci-cd.md).
