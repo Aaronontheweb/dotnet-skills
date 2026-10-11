@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.7.1 (2026-10-11)
+
+### Improvements
+
+- **sdk-container-publishing** - Corrected the skill against Microsoft Learn and the dotnet/sdk source: `ContainerImageTag` and `ContainerImageTags` are mutually exclusive (`CONTAINER2008`), `$(VersionPrefix)` is empty at project-body evaluation time, the `latest` tag default dates from .NET 8 (not .NET 10), `ContainerPublishInParallel` only serializes per-RID inner publishes, a registry push needs no daemon, and `ContainerEntrypoint` is deprecated since .NET 8. Fixed the dead registry-auth link, documented `DOTNET_CONTAINER_REGISTRY_UNAME`/`_PWORD` and `docker login --password-stdin`, and quoted semicolon-delimited `-p:` values in Bash. ([#94](https://github.com/Aaronontheweb/dotnet-skills/pull/94))
+
 ## v1.7.0 (2026-10-10)
 
 ### New Skills
