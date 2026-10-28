@@ -1,7 +1,7 @@
 ---
 name: modern-csharp-coding-standards
 description: Write modern, high-performance C# code using records, pattern matching, value objects, async/await, Span<T>/Memory<T>, and best-practice API design patterns. Emphasizes functional-style programming with C# 12+ features.
-invocable: false
+user-invocable: false
 ---
 
 # Modern C# Coding Standards
@@ -211,7 +211,7 @@ See [performance-and-api-design.md](performance-and-api-design.md) for complete 
 
 ## Error Handling: Result Type
 
-For expected errors, use `Result<T, TError>` instead of exceptions. Use exceptions only for unexpected/system errors.
+For expected errors, use a domain-specific result type instead of exceptions, not a generic `Result<T>`. Use exceptions only for unexpected/system errors.
 
 See [composition-and-error-handling.md](composition-and-error-handling.md) for the full Result type implementation and usage examples.
 

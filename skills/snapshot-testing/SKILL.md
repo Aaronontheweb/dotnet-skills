@@ -1,7 +1,7 @@
 ---
 name: snapshot-testing
 description: Use Verify for snapshot testing in .NET. Approve API surfaces, HTTP responses, rendered emails, and serialized outputs. Detect unintended changes through human-reviewed baseline files.
-invocable: false
+user-invocable: false
 ---
 
 # Snapshot Testing with Verify
@@ -387,7 +387,7 @@ await Verify(result.Count);  // Just use Assert.Equal(5, result.Count)
 
 ## Integration with MJML Email Testing
 
-See the `aspnetcore/transactional-emails` skill for the complete pattern:
+See the `mjml-email-templates` and `verify-email-snapshots` skills for the complete pattern:
 
 1. MJML templates with `{{variable}}` placeholders
 2. Render to HTML with test data

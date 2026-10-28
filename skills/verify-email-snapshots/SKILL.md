@@ -1,7 +1,7 @@
 ---
 name: verify-email-snapshots
 description: Snapshot test email templates using Verify to catch regressions. Validates rendered HTML output matches approved baseline. Works with MJML templates and any email renderer.
-invocable: false
+user-invocable: false
 ---
 
 # Snapshot Testing Email Templates with Verify

@@ -1,7 +1,7 @@
 ---
 name: r3-reactive-extensions
 description: Build reactive/event-driven C# with R3 (Cysharp's modern reimplementation of Reactive Extensions). Covers the Observable<T>/Observer<T> model, the OnErrorResume error contract, async dispatch with AwaitOperation, Task/IAsyncEnumerable integration, TimeProvider/FrameProvider scheduling, the concurrency contract, and how R3 differs from System.Reactive (Rx.NET).
-invocable: false
+user-invocable: false
 ---
 
 # R3: Modern Reactive Extensions for .NET

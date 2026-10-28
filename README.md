@@ -113,10 +113,10 @@ Workflow: skim repo patterns -> consult dotnet-skills by name -> implement small
 
 Routing (invoke by name)
 - C# / code quality: modern-csharp-coding-standards, csharp-concurrency-patterns, api-design, type-design-performance, r3-reactive-extensions
-- ASP.NET Core / Web (incl. Aspire): aspire-service-defaults, aspire-integration-testing, transactional-emails
+- ASP.NET Core / Web (incl. Aspire): aspire-service-defaults, aspire-integration-testing, mailpit-integration, mjml-email-templates, verify-email-snapshots
 - Data: efcore-patterns, database-performance
 - DI / config: dependency-injection-patterns, microsoft-extensions-configuration
-- Testing: testcontainers-integration-tests, playwright-blazor-testing, snapshot-testing
+- Testing: cscheck, testcontainers-integration-tests, playwright-blazor-testing, snapshot-testing
 
 Quality gates (use when applicable)
 - dotnet-slopwatch: after substantial new/refactor/LLM-authored code
@@ -140,8 +140,8 @@ Run `./scripts/generate-skill-index-snippets.sh --update-readme` to refresh the 
 |aspnetcore-web:{aspire-integration-testing,aspire-configuration,aspire-service-defaults,mailpit-integration,mjml-email-templates}
 |data:{efcore-patterns,database-performance}
 |di-config:{microsoft-extensions-configuration,dependency-injection-patterns}
-|testing:{testcontainers-integration-tests,playwright-blazor-testing,snapshot-testing,verify-email-snapshots,playwright-ci-caching}
-|dotnet:{dotnet-project-structure,dotnet-local-tools,package-management,serialization,dotnet-devcert-trust,ilspy-decompile,opentelemetry-net-instrumentation,aot-trimming}
+|testing:{cscheck,testcontainers-integration-tests,playwright-blazor-testing,snapshot-testing,verify-email-snapshots,playwright-ci-caching}
+|dotnet:{sdk-container-publishing,dotnet-project-structure,dotnet-local-tools,package-management,serialization,dotnet-devcert-trust,ilspy-decompile,opentelemetry-net-instrumentation,aot-trimming}
 |quality-gates:{dotnet-slopwatch,crap-analysis}
 |meta:{marketplace-publishing,skills-index-snippets}
 |agents:{akka-net-specialist,docfx-specialist,dotnet-benchmark-designer,dotnet-concurrency-specialist,dotnet-performance-analyst,roslyn-incremental-generator-specialist}
@@ -242,6 +242,7 @@ Comprehensive testing strategies.
 
 | Skill                      | What You'll Learn                                             |
 | -------------------------- | ------------------------------------------------------------- |
+| **cscheck**                | Property generators, model-based tests, native Spec, shrinking and replay |
 | **testcontainers**         | Docker-based integration tests, PostgreSQL, Redis, RabbitMQ   |
 | **playwright-blazor**      | E2E testing for Blazor apps, page objects, async assertions   |
 | **crap-analysis**          | CRAP scores, coverage thresholds, ReportGenerator integration |

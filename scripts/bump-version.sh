@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # bump-version.sh <new-version>
-# Bumps the version in BOTH plugin manifests (.claude-plugin/plugin.json and
-# .codex-plugin/plugin.json) so they stay in lockstep, then runs the Codex
-# validator to prove nothing drifted. Run this at the start of a release:
+# Bumps the version in both plugin manifests (.claude-plugin/plugin.json and
+# .codex-plugin/plugin.json) plus the Claude marketplace catalog
+# (.claude-plugin/marketplace.json) so they stay in lockstep, then runs the
+# Codex validator to prove nothing drifted. Run this at the start of a release:
 #
 #   ./scripts/bump-version.sh 1.5.0
 #
@@ -37,6 +38,38 @@ for manifest in "${MANIFESTS[@]}"; do
   jq --arg v "$NEW_VERSION" '.version = $v' "$manifest" > "$manifest.tmp" && mv "$manifest.tmp" "$manifest"
   echo "Bumped $(basename "$(dirname "$manifest")")/$(basename "$manifest"): $OLD_VERSION -> $NEW_VERSION"
 done
+
+# The Claude marketplace catalog (.claude-plugin/marketplace.json) embeds a
+# display-only per-plugin version. Keep it in lockstep — the Codex validator
+# checks it, so a drift would fail the next bump.
+CLAUDE_MARKETPLACE_JSON="$REPO_ROOT/.claude-plugin/marketplace.json"
+if [ -f "$CLAUDE_MARKETPLACE_JSON" ]; then
+  OLD_MKTVERSION=$(jq -r '.plugins[0].version // empty' "$CLAUDE_MARKETPLACE_JSON")
+  if [ -n "$OLD_MKTVERSION" ]; then
+    jq --arg v "$NEW_VERSION" '.plugins[0].version = $v' "$CLAUDE_MARKETPLACE_JSON" > "$CLAUDE_MARKETPLACE_JSON.tmp" && mv "$CLAUDE_MARKETPLACE_JSON.tmp" "$CLAUDE_MARKETPLACE_JSON"
+    echo "Bumped .claude-plugin/marketplace.json: $OLD_MKTVERSION -> $NEW_VERSION"
+  fi
+
+  # Derive the catalog description's skill/agent counts from the Claude
+  # manifest so the marketplace never advertises stale numbers. Only rewrites
+  # when the description uses the expected "with N skills and M specialized
+  # agents" template; hand-written descriptions pass through untouched.
+  CLAUDE_PLUGIN_JSON="$REPO_ROOT/.claude-plugin/plugin.json"
+  if [ -f "$CLAUDE_PLUGIN_JSON" ]; then
+    SKILL_COUNT=$(jq '.skills | length' "$CLAUDE_PLUGIN_JSON")
+    AGENT_COUNT=$(jq '.agents | length' "$CLAUDE_PLUGIN_JSON")
+    OLD_DESC=$(jq -r '.plugins[0].description // empty' "$CLAUDE_MARKETPLACE_JSON")
+    if [ -n "$OLD_DESC" ]; then
+      NEW_DESC=$(jq -r --argjson s "$SKILL_COUNT" --argjson a "$AGENT_COUNT" \
+        '.plugins[0].description | select(. != null) | sub("with [0-9]+ skills and [0-9]+ specialized agents"; "with \($s) skills and \($a) specialized agents")' \
+        "$CLAUDE_MARKETPLACE_JSON")
+      if [ -n "$NEW_DESC" ] && [ "$NEW_DESC" != "$OLD_DESC" ]; then
+        jq --arg d "$NEW_DESC" '.plugins[0].description = $d' "$CLAUDE_MARKETPLACE_JSON" > "$CLAUDE_MARKETPLACE_JSON.tmp" && mv "$CLAUDE_MARKETPLACE_JSON.tmp" "$CLAUDE_MARKETPLACE_JSON"
+        echo "Updated .claude-plugin/marketplace.json description counts: $SKILL_COUNT skills / $AGENT_COUNT agents"
+      fi
+    fi
+  fi
+fi
 
 echo ""
 echo "Running Codex validator (lockstep check)..."
