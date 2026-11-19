@@ -18,9 +18,9 @@ Use this skill when:
 
 ## What is CRAP?
 
-**CRAP Score = Complexity x (1 - Coverage)^2**
+**CRAP Score = Complexity^2 x (1 - Coverage)^3 + Complexity**
 
-The CRAP (Change Risk Anti-Patterns) score combines cyclomatic complexity with test coverage to identify risky code.
+The CRAP (Change Risk Anti-Patterns) score combines cyclomatic complexity with test coverage to identify risky code. Coverage is a fraction from 0.0 to 1.0.
 
 | CRAP Score | Risk Level | Action Required |
 |------------|------------|-----------------|
@@ -28,21 +28,13 @@ The CRAP (Change Risk Anti-Patterns) score combines cyclomatic complexity with t
 | **5-30** | Medium | Acceptable but watch complexity |
 | **> 30** | High | Needs tests or refactoring |
 
+The score has a floor of `Complexity`: at 100% coverage it equals the complexity exactly, so a method whose complexity already reaches the threshold cannot be rescued by tests. Reduce the complexity first.
+
 ### Why CRAP Matters
 
 - **High complexity + low coverage = danger**: Code that's hard to understand AND untested is risky to modify
 - **Complexity alone isn't enough**: A complex method with 100% coverage is safer than a simple method with 0%
 - **Focuses effort**: Prioritize testing on complex code, not simple getters/setters
-
-### CRAP Score Examples
-
-| Method | Complexity | Coverage | Calculation | CRAP |
-|--------|------------|----------|-------------|------|
-| `GetUserId()` | 1 | 0% | 1 x (1 - 0)^2 | **1** |
-| `ParseToken()` | 54 | 52% | 54 x (1 - 0.52)^2 | **12.4** |
-| `ValidateForm()` | 20 | 0% | 20 x (1 - 0)^2 | **20** |
-| `ProcessOrder()` | 45 | 20% | 45 x (1 - 0.20)^2 | **28.8** |
-| `ImportData()` | 80 | 10% | 80 x (1 - 0.10)^2 | **64.8** |
 
 ---
 
@@ -185,21 +177,14 @@ The HTML report includes a **Risk Hotspots** section showing methods sorted by c
 
 ### Interpreting Results
 
-```
-Risk Hotspots
-─────────────
-Method                          Complexity  Coverage  Crap Score
-──────────────────────────────────────────────────────────────────
-DataImporter.ParseRecord()      54          52%       12.4
-AuthService.ValidateToken()     32          0%        32.0   ← HIGH RISK
-OrderProcessor.Calculate()      28          85%       1.3
-UserService.CreateUser()        15          100%      0.0
-```
+Read the rows from the highest `Crap Score` down. ReportGenerator computes that column from the complexity and coverage data already in this report. Do not recompute it by hand: quote the tool value together with the inputs it used.
 
 **Action items:**
-- `ValidateToken()` has CRAP > 30 with 0% coverage - **test immediately or refactor**
-- `ParseRecord()` is complex but has decent coverage - acceptable
-- `CreateUser()` and `Calculate()` are well-tested - safe to modify
+- Highest score with low coverage: add tests or refactor
+- High complexity with high coverage: acceptable, keep an eye on the complexity
+- Low complexity with high coverage: safe to modify
+
+A method that is absent from the report is failed collection or filtering, not 0% coverage. Regenerate the report rather than scoring it as zero.
 
 ---
 
