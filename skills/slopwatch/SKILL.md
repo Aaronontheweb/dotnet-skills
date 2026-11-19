@@ -244,6 +244,73 @@ slopwatch analyze -d . --config path/to/config.json
 slopwatch analyze -d . --exclude "**/Generated/**,**/obj/**,**/bin/**"
 ```
 
+### Suppressing a Single Finding in Code
+
+Config suppressions cover whole paths. When one line or declaration is the exception, suppress it in the code instead. All in-code forms require a justification of **at least 20 characters** — a shorter one is silently ignored and the finding still reports.
+
+**Inline comment** — covers the line it sits on and the next line:
+
+```csharp
+// slopwatch-ignore: SW004 Testing rate limiter behavior requires actual time delays
+await Task.Delay(1000);
+```
+
+A trailing comment on the same line works too. It must be a `//` comment; `/* */` is not parsed.
+
+**Block comment** — covers a range:
+
+```csharp
+// slopwatch-ignore-start: SW002 Legacy interop requires suppressing obsolete API warnings
+#pragma warning disable CS0618
+public void CallObsoleteApi() { ... }
+#pragma warning restore CS0618
+// slopwatch-ignore-end
+```
+
+**Attribute** — covers the nearest enclosing declaration:
+
+```csharp
+[SlopwatchSuppress(
+    "SW021",
+    "COM interop requires late-bound dispatch through IDispatch",
+    "Interop")]
+public void CallComObject(dynamic comObject) { ... }
+```
+
+**XML comment** — for `.csproj`, `.props`, `.targets`, on the line directly above the element:
+
+```xml
+<!-- slopwatch-ignore: SW005 This legacy project requires warnings disabled to build -->
+<NoWarn>$(NoWarn);CS1591</NoWarn>
+```
+
+#### Placement Rules That Bite
+
+These are the mistakes that make a suppression silently do nothing:
+
+- **The comment must sit above the *reported* line, not the declaration.** SW003 reports the `catch` keyword line, so a comment above the method signature does not suppress it. SW001 reports the `Skip`/`Ignore` attribute line, so the comment goes above the attribute.
+- **A class-level attribute does not reach into its methods.** Scope is the nearest enclosing declaration. Put the attribute on the method that contains the finding.
+- **Stacking two comments does not suppress two rules on one line.** Each comment covers only its own line and the next, so the outer one stops short. Use the attribute or a block instead.
+- **An unterminated `slopwatch-ignore-start` suppresses nothing.**
+- **Rule IDs must be `SW###`** — `SW001`, not `sw1`. Matching is case-insensitive, and extra whitespace is fine.
+
+#### The Attribute Without the Package
+
+The attribute is matched by name, not type identity, so a project can declare a local stub instead of referencing the `Slopwatch` package:
+
+```csharp
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
+internal sealed class SlopwatchSuppressAttribute(string ruleId, string reason) : Attribute
+{
+    public string RuleId { get; } = ruleId;
+    public string Reason { get; } = reason;
+}
+```
+
+This is common in test projects that don't otherwise depend on Slopwatch. The tradeoff: the real constructor validates the rule ID, justification length, category, and rejects generic justifications like `"false positive"`. A stub validates nothing, so a typo'd rule ID or a lazy justification silently does nothing.
+
+**When you are the LLM being blocked:** a suppression is not a fix. Reach for one only when the pattern is genuinely legitimate — platform-specific code, interop, generated code, or a test that must exercise real timing. Never add a suppression to make a failing check go away.
+
 ### Strict Mode (Recommended for LLM Sessions)
 
 For maximum protection during LLM coding sessions, fail on warnings as well as errors:
