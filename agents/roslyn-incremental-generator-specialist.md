@@ -268,6 +268,8 @@ var targetModels = context.SyntaxProvider
 - Enforce deterministic ordering using ordinal comparers and stable keys.
 - Centralize hint-name generation and keep it stable.
 - Avoid nondeterminism such as dictionary enumeration order.
+- Qualify every emitted type and namespace reference with `global::`: write `global::System.…` and `global::YourLibrary.…`, and format user types with `SymbolDisplayFormat.FullyQualifiedFormat`. Generated code compiles inside the consumer's namespaces and nested types, where any type, namespace, or member with the same name as a root namespace hides it. Keywords and namespace declarations are the exceptions.
+- Cover it with a test case whose consumer namespace contains a segment named like a root namespace the generator references, for example `Acme.YourLibrary.Handlers`.
 
 ## Cancellation token propagation
 
