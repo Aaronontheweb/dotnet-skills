@@ -145,6 +145,7 @@ async Task HelperAsync()
 - Never start activities in async helper methods (`Activity.Current` uses `AsyncLocal`)
 - Guard expensive tag computation behind `activity.IsAllDataRequested`
 - Use W3C TraceContext. .NET Core 3.0+ / .NET 5+ uses it by default; older TFMs or .NET Framework apps may set `Activity.DefaultIdFormat = ActivityIdFormat.W3C` at startup and use `Activity.ForceDefaultIdFormat = true` to override hierarchical parents.
+- A library that must force W3C without touching process-wide statics calls `activity.SetIdFormat(ActivityIdFormat.W3C)` on its own `Activity` — only where the parent comes from outside its control (an incoming request, a legacy `Request-Id` header, a host span). Children inherit the ID format of their parent, so spans nested below the library's own W3C spans, including user-created spans in between (middleware, pipeline behaviors), need no check. `SetIdFormat` only works **before** `Start()`; on a started activity the runtime ignores it.
 
 ### Activity Naming
 
@@ -210,6 +211,8 @@ activity?.SetTag("myapp.order-id", orderId);    // ❌ Wrong delimiter
 - Attribute values: string, boolean, double, int64, byte arrays, homogeneous arrays (null/empty valid per [AnyValue spec](https://opentelemetry.io/docs/specs/otel/common/#anyvalue))
 - **Business/domain attributes**: use your own namespace (`myapp.*`).
 - **HTTP, database, messaging, or RPC concepts you manually instrument**: use [semantic conventions](https://opentelemetry.io/docs/specs/semconv/). Do not duplicate attributes already emitted by auto-instrumentation. Do not use OTel namespaces as prefixes for custom attributes.
+- **Layered instrumentation**: emit a semantic-convention attribute only if no other layer in the same call path emits the same key. If a layer below or above you uses that key with a *different* value, use your own namespace instead. Example: a messaging framework's logical message ID is not the broker's native message ID, so the framework uses `myframework.message_id` and leaves `messaging.message.id` to the broker SDK span. The same key with two values in one trace makes queries match the wrong span.
+- **Only tag what characterizes this operation.** Host, process, and environment data (machine name, IP address, runtime version) belongs on the [Resource](sdk-resources-and-logs-reference.md#resources), which the application configures once — not on every span. Each tag is public API, adds storage and export cost on every span, and can leak personal data.
 
 ### Activity Status and Errors
 
@@ -291,6 +294,42 @@ using var ownedActivity = ActivitySource.StartActivity("MyOperation"); // ✅ ca
 ownedActivity?.SetTag("myapp.key", value);
 ```
 **Rules**: Do not rely on `Activity.Current` for spans you own; user code can replace it via `AsyncLocal`. Pass/store captured `Activity` only while alive. Store `ActivityContext` for propagation identity.
+
+### Treat Tags as Write-Only
+
+```csharp
+// ❌ WRONG: Using a tag as state
+activity?.SetTag("myapp.retry_count", retries);
+// ... later
+var retries = (int?)activity?.GetTagItem("myapp.retry_count") ?? 0; // ❌ null when not sampled, user-overwritable
+
+// ✅ CORRECT: Keep state in your own context, write the tag as output only
+context.RetryCount++;
+activity?.SetTag("myapp.retry_count", context.RetryCount);
+```
+
+**Rules**:
+- Tags are output for the backend, not state for your code. Do not read them back with `GetTagItem`, `Tags`, or `TagObjects` to make decisions.
+- A tag may not exist: tags you guard behind `IsAllDataRequested` (as this skill recommends) are absent when the activity was created for propagation only, so logic that reads them works only for sampled traces.
+- User code (middleware, pipeline behaviors, processors) can overwrite a tag with `SetTag` on the same key.
+- Lookups walk the activity's internal tag list on every call — a hidden cost in hot paths.
+- Exception: tests and diagnostics tools that *assert* on emitted telemetry. Use `TagObjects` there — `Tags` returns only string-valued tags and skips arrays and numbers.
+
+### Span Events
+
+```csharp
+// ✅ Modest number of events that add context to this span
+activity?.AddEvent(new ActivityEvent("cache.miss"));
+
+// ❌ WRONG: One event per item in a loop
+foreach (var item in batch)
+    activity?.AddEvent(new ActivityEvent("item.processed")); // ❌ use a child span, a log, or a counter
+```
+
+**Rules**:
+- Events are kept in an in-memory list on the `Activity` until the span ends and is exported. A long-running span with many events holds all of them. Exporters cap the count (OTLP: `OTEL_SPAN_EVENT_COUNT_LIMIT`, default 128) and drop the rest silently.
+- Traces are sampled, so events are too. Never derive counts or rates from span events — at 10% sampling you see about 10% of them. Use a `Counter` (metrics are not sampled).
+- Use an event only when it adds context to *this* span. If an event has a duration or its own outcome, make it a child span. Verbose detail belongs in a log line, which has a level and can be filtered.
 
 ### Span Links
 
@@ -388,6 +427,7 @@ failureCount.Add(1, new KeyValuePair<string, object?>("order_id", orderId)); // 
 - Dimensions MUST be predefined and low-cardinality (item type, queue name, outcome)
 - Avoid unbounded values (each unique value = new time series row → cardinality explosion)
 - High-cardinality dimensions MUST be opt-in configuration
+- No sensitive or user-provided values (user names, email addresses, free text) as dimensions, even when bounded — every exported data point repeats them. Prefer low-cardinality identifiers such as type names, queue names, or a logical outcome.
 - Consistent names across components: `myapp.region` means the same everywhere
 - Users can enable [exemplars](https://opentelemetry.io/docs/languages/dotnet/metrics/exemplars/) for trace correlation (not via dimensions)
 
@@ -425,6 +465,20 @@ finally { var duration = Stopwatch.GetElapsedTime(startTime); metrics.OrderProce
 // ❌ Allocates: Stopwatch.StartNew() or IDisposable timing wrappers
 ```
 
+**Rules**:
+- Prefer `Stopwatch.GetTimestamp()` + `Stopwatch.GetElapsedTime(start)` — allocation-free on every runtime. `GetElapsedTime` needs .NET 7+; on older targets compute `(end - start) * TimeSpan.TicksPerSecond / Stopwatch.Frequency`.
+- `Stopwatch.StartNew()` allocates a `Stopwatch` object. Since .NET 10 the JIT can stack-allocate it when the instance does not escape the method ([details](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-10/#diagnostics)), but that is a JIT optimization, not a guarantee — do not rely on it in hot paths or multi-targeted libraries.
+- No class-based timing scopes (`using var _ = new MetricScope(...)`) in hot paths: they allocate on every call and add GC pressure for a small readability gain. If a helper is really needed, use a small `readonly struct` that implements `IDisposable` — `using` on a struct local calls `Dispose` without boxing.
+
+```csharp
+// ✅ Only if a helper is really needed: no heap allocation
+readonly struct DurationScope(Histogram<double> histogram, TagList tags) : IDisposable
+{
+    private readonly long start = Stopwatch.GetTimestamp();
+    public void Dispose() => histogram.Record(Stopwatch.GetElapsedTime(start).TotalSeconds, tags);
+}
+```
+
 ### Avoid Hidden Allocations
 
 ```csharp
@@ -437,9 +491,11 @@ if (activity?.IsAllDataRequested == true)
 ```
 
 **Rules**:
-- No `Stopwatch.StartNew()` (use `Stopwatch.GetTimestamp()`/`GetElapsedTime`)
-- Prefer `TagList` (struct) over arrays/dictionaries
+- No `Stopwatch.StartNew()` in hot paths (use `Stopwatch.GetTimestamp()`/`GetElapsedTime`, see [Timing](#timing))
+- Prefer `TagList` (struct) over arrays/dictionaries. Do not build temporary `string`, `object[]`, or `Dictionary` instances just to assemble tags or log state — write tags directly.
 - No LINQ, string interpolation, or async state machines in hot paths without guards
+- Build span names and other derived strings only after you know a span exists (after the `null` check), not before `StartActivity`.
+- No `record` / `record struct` for instrumentation helpers unless you need value equality or `with` expressions. Records generate equality, `GetHashCode`, `ToString`, and copy members you do not need, and a `record` (class) is a heap allocation. Use a plain `readonly struct` or a static method.
 
 ## Testing Requirements
 
