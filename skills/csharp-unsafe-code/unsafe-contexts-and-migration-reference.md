@@ -1,6 +1,6 @@
 # Unsafe Contexts and Migration Reference
 
-> **Compatibility — source snapshot 2026-09-12.** Use this reference to identify unsafe contexts, diagnose compiler behavior, and migrate declarations, bodies, callers, and assemblies to the updated memory-safety model. Recheck only version-sensitive integration details: the installed SDK's exact opt-in/property spelling, release branding, diagnostic wording/numbers, metadata namespace and tooling behavior, and incomplete library coverage.
+> **Compatibility — source snapshot 2026-11-26, .NET 11 GA (SDK 11.0.100).** The updated memory-safety model ships in .NET 11 as an off-by-default preview. It is not part of C# 15; it is nominally a C# 16 / .NET 12 feature. Use this reference to identify unsafe contexts, diagnose compiler behavior, and migrate declarations, bodies, callers, and assemblies to that model. Rules marked **later compilers** landed after 11.0.100 (Roslyn milestones 18.13 and 18.14) and are not in the GA SDK. Recheck those, the stable opt-in property name, and library coverage against the installed SDK.
 
 ## Contents
 
@@ -19,9 +19,9 @@
 
 ## Compatibility and Terminology
 
-The updated model is the migration target: member `unsafe` expresses a **requires-unsafe** caller contract, implementation operations use explicit unsafe regions, declaration shapes change, and the compiler propagates contracts through metadata. The Roslyn initial implementation plus more than 200 runtime reduce-unsafe changes make those semantics durable enough to guide migrations, but the Roslyn test plan and follow-up items remain open in the tracking issue, so treat diagnostics and tooling as still moving.
+The updated model is the migration target: member `unsafe` expresses a **requires-unsafe** caller contract, implementation operations use explicit unsafe regions, declaration shapes change, and the compiler propagates contracts through metadata. .NET 11 ships it as a preview: off by default, gated on the `preview` language version, and still changing after GA. The semantics are documented on Microsoft Learn and exercised by the runtime's own migration, which makes them durable enough to guide migrations. The Roslyn test plan remains open, the runtime tracking issue is open with a 12.0.0 milestone, and the SDK design expects broad adoption in the .NET 12 or 13 timeframe.
 
-Keep a green legacy build while evaluating them. Record the exact SDK observed, and use that SDK's supported opt-in rather than copying configuration from another version. The compatibility note above lists the integration details that still require rechecking. The active design, compiler, runtime, and SDK links in [Primary Sources](#primary-sources) provide provenance. Older sources may call requires-unsafe **caller-unsafe**.
+Keep a green legacy build while evaluating them. Record the exact SDK observed, and use that SDK's supported opt-in rather than copying configuration from another version. The compatibility note above lists the integration details that still require rechecking. The active design, compiler, runtime, and SDK links in [Primary Sources](#primary-sources) provide provenance. Older sources may call requires-unsafe **caller-unsafe**; runtime PRs call the updated model **unsafe-v2** and the feature **unsafe evolution**.
 
 ## Classify the Active Model
 
@@ -45,11 +45,13 @@ Classify each build independently:
 | --- | --- | --- |
 | **Legacy unsafe semantics** | Updated memory-safety rules are not active. | Establish a lexical unsafe context on a type, member, or block. It does not encode a general caller obligation. |
 | **C# 13 placement overlay** | C# 13 or later language behavior without the updated model. | Keep legacy unsafe semantics while allowing more ref/unsafe declarations in non-suspending regions of async/iterator code. Apply this row together with legacy semantics. |
-| **Updated model** | The installed compiler's updated memory-safety rules are active. | Treat member `unsafe` as a requires-unsafe caller contract; do not treat it as an unsafe body context. Require explicit implementation regions for operations that remain unsafe. |
+| **Preview language, rules not enabled** | `LangVersion` is `preview` but the assembly has not opted in. | Keep legacy `unsafe` semantics, plus the preview relaxations: pointer declarations, address-of, `fixed`, pointer `stackalloc`, and unmanaged `sizeof` compile in safe code, and `unsafe(expression)`, `safe`, and `await` in unsafe contexts are accepted. Calling a member with pointers in its signature still needs an unsafe context (CS9363). |
+| **Updated model** | The `preview` language version and the assembly's opt-in are both active; the compiler stamps the module with `MemorySafetyRulesAttribute`. | Treat member `unsafe` as a requires-unsafe caller contract; do not treat it as an unsafe body context. Require explicit implementation regions for operations that remain unsafe. |
 
 `AllowUnsafeBlocks` and the memory-safety-rule opt-in are independent:
 
-- `AllowUnsafeBlocks` controls whether source may use unsafe code constructs requiring `/unsafe`.
+- `AllowUnsafeBlocks` controls whether source may use the `unsafe` keyword: blocks, `unsafe(expression)`, and member modifiers. Later compilers also require it for the `safe` modifier (CS9401).
+- The preview relaxations do not need it. Pointer declarations, address-of, and `sizeof(Guid)` compiled with `AllowUnsafeBlocks` unset in an SDK 11.0.100 check.
 - Updated rules can diagnose calls to requires-unsafe APIs even when a project does not allow its own unsafe blocks.
 - A project that does not allow unsafe blocks may need to remove the dependency or call, rather than enabling unsafe merely to silence the diagnostic.
 
@@ -120,6 +122,19 @@ public static unsafe int Read(int* pointer)
 
 The outer modifier propagates an obligation. The inner block discharges the implementation operation. Do not delete the inner block because the declaration is marked `unsafe`, and do not mark a wrapper `unsafe` merely to avoid proving its invariants.
 
+A constructor initializer cannot be wrapped in a block. To call a requires-unsafe `base(...)` or `this(...)` constructor, mark the calling constructor `unsafe`; the modifier makes its initializer an unsafe context.
+
+### Unsafe expressions
+
+`unsafe(expression)` creates an unsafe context for one expression and ends at the closing parenthesis. Use it where a block cannot appear: a field initializer, a constructor-initializer argument, a `catch` filter, an expression-bodied member, or the operand of `await`. It needs `AllowUnsafeBlocks` and the `preview` language version. Wrapping an argument covers only that argument; it does not discharge a requires-unsafe `base(...)` or `this(...)` call. SDK 11.0.100 also still reports CS9362 for `unsafe(P)` when `P` is a requires-unsafe property ([roslyn#86211](https://github.com/dotnet/roslyn/issues/86211)); use a block there.
+
+```csharp
+// SAFETY: _start points at the buffer this instance pinned in its constructor and unpins in Dispose.
+private byte First => unsafe(*_start);
+```
+
+Prefer a block when a statement fits, because a block leaves room for the `// SAFETY:` comment next to the operation. The runtime's migration fixer makes the same choice ([#135341](https://github.com/dotnet/runtime/pull/135341)).
+
 ### Safe-callable boundary
 
 Keep a member safe-callable when it can establish all obligations itself:
@@ -141,9 +156,9 @@ If a downlevel implementation needs an unsafe primitive, retain a safe signature
 
 ### Pointer creation versus use
 
-The updated rules relax pointer declarations, address-taking, `fixed`, pointer-producing `stackalloc`, and general unmanaged `sizeof`. Pointer dereference, pointer member access, pointer indexing, and function-pointer invocation remain unsafe operations.
+The `preview` language version relaxes pointer declarations, address-taking, the `fixed` statement, pointer-producing `stackalloc`, `sizeof` on any unmanaged type, and the declaration of fixed-size buffers and function-pointer types. The relaxations apply whether or not the assembly opts in to the updated rules. Pointer dereference, pointer member access, pointer indexing, fixed-size buffer element access, function-pointer invocation, and every use of a requires-unsafe member remain unsafe operations.
 
-The following illustrates the distinction under an SDK that implements the updated rules:
+The following illustrates the distinction under the `preview` language version:
 
 ```csharp
 int value = 42;
@@ -157,6 +172,8 @@ unsafe
 ```
 
 Also keep pointer arithmetic and conversions under review even when the active compiler permits their syntax outside a block. A relaxed syntactic operation does not prove bounds, provenance, lifetime, or alignment.
+
+The relaxations are source-breaking in two documented ways. Lambda-to-delegate overloads with pointer parameters become applicable in safe code, which can turn a previously unambiguous call into CS0121. `safe` becomes a contextual keyword, so a type named `safe` needs `@safe`. Later compilers add one restriction: taking the address of a variable that is not definitely assigned requires an unsafe context (CS9403).
 
 ### Type-level unsafe
 
@@ -172,7 +189,7 @@ public unsafe sealed class NativeView
 }
 ```
 
-Under the updated rules, type-level `unsafe` becomes invalid or meaningless. Remove it, classify fields and members individually, and add narrow blocks to bodies. Do not mechanically move `unsafe` from the type to every member; doing so would publish caller obligations that may not be honest.
+Under the updated rules, `unsafe` on a type, static constructor, finalizer, or delegate is an error (CS9377); the modifier has no effect there. Lambdas cannot carry the modifier, and a local function is classified on its own rather than inheriting from its containing member. Remove the type-level modifier, classify fields and members individually, and add narrow blocks to bodies. Do not mechanically move `unsafe` from the type to every member; doing so would publish caller obligations that may not be honest.
 
 ## Classify Declarations and Contracts
 
@@ -200,23 +217,46 @@ Treat requires-unsafe as a source/tooling contract and align it across:
 - virtual and abstract members and their overrides;
 - interface declarations and implicit or explicit implementations;
 - both parts of a partial method or partial property;
-- property accessors and their containing property;
-- constructors, including implicit `base()`/`this()` and generic `new()` use;
-- events and fields where the installed SDK permits contracts;
+- a property and its accessors: put the modifier on one or the other, not both (CS9396), and on the property when every accessor would carry it (CS9397);
+- constructors, including implicit `base()`/`this()` and generic `new()` or `struct` constraint use;
+- events, which are marked as a whole;
+- fields, whose reads and writes then need an unsafe context;
+- `extern` and `[LibraryImport]` declarations, which must state `safe` or `unsafe`;
 - method groups and delegate boundaries;
 - generated declarations and generated implementations.
 
-Do not strengthen a safe base or interface contract in an implementation. Callers through the base or interface must not lose the safety promise.
+Do not strengthen a safe base or interface contract in an implementation (CS9364–CS9366). Callers through the base or interface must not lose the safety promise. Marking a property or event `unsafe` does not make its backing field requires-unsafe; mark the field when the invariant lives there.
 
-### Mark audited-safe declarations
+### Mark `safe` declarations
 
-Under the updated model, `safe` is a contextual keyword placed on declarations. It is explicitly required for fields of explicit/extended-layout structs and for `extern` members; runtime CoreLib PR [#131719](https://github.com/dotnet/runtime/pull/131719) applies it there. A `<safety>` documentation comment on a member records that a human audit concluded it stays safe and stops migration tooling from conservatively adding `unsafe` to it.
+`safe` is a contextual declaration modifier: the member does not require an unsafe context at its use site. Under the updated rules it is required, as the alternative to `unsafe`, on every `extern` member, including `[LibraryImport]` partial methods (CS9389, SYSLIB1064), and on instance fields of explicit- or extended-layout types (CS9392). It is allowed on any declaration that can be `unsafe`, but ordinary declarations are safe by default, so omit it there.
 
-Neither mechanism is a proof and neither is a runtime guard. `safe` placement must be justified by an audit — the tooling will not invent it — and a `<safety>` comment must be backed by the full invariant proof. The CS9389/CS9392 fixers emit `safe` (rather than `unsafe`) when the declaration carries a `<safety>` element, so an audit recorded in source survives the migration.
+```csharp
+[LibraryImport("libc")]
+internal static safe partial int getpid();
+
+[LibraryImport("libc")]
+internal static unsafe partial nint strlen(byte* str);
+```
+
+`safe` creates no lexical context, cannot be combined with `unsafe` (CS9388), and must match across both parts of a partial member (CS9390). Later compilers require `AllowUnsafeBlocks` to write it (CS9401).
+
+`safe` is an attestation, not a check. Write it only after auditing what the native code or the overlapping layout can do with every input; no compiler or fixer can justify it. Choose `unsafe` when the callee dereferences a pointer argument or when soundness depends on anything the caller controls. Runtime PRs [#131719](https://github.com/dotnet/runtime/pull/131719) and [#134134](https://github.com/dotnet/runtime/pull/134134) show the audit-then-`safe` pattern.
+
+### Document safety contracts
+
+Record the contract in two places:
+
+- A `<safety>` XML documentation element on a requires-unsafe member states what the caller must guarantee. On an `unsafe` field it states the invariant the enclosing type maintains.
+- A `// SAFETY:` comment on an `unsafe` block or expression states why that operation is valid at that point.
+
+The compiler does not process `<safety>`; it copies the tag to the documentation file like any other.
+
+The dotnet/runtime migration tooling builds on these conventions. Its analyzers (IL5005–IL5010) flag `unsafe` members and explicit `safe` modifiers that lack `<safety>` and `unsafe` blocks that lack a `// SAFETY:` comment, and its fixers leave a `// SAFETY: To be audited` placeholder for a human to replace. That tooling is non-shipping and off by default (tracking issue [#131451](https://github.com/dotnet/runtime/issues/131451)); treat it as a model for a review process, not as analyzers the SDK provides. From Roslyn 18.13, IDE0380 no longer offers to remove an `unsafe` modifier from a member that has a `<safety>` element.
 
 ### Classify explicit-layout fields
 
-In explicit or extended layout types, classify each instance field as `safe` or `unsafe`; synthesized backing fields can shift the declaration requirement to an auto-property or field-like event. Treat this syntax and `ExtendedLayout` support as moving. Follow the installed compiler's diagnostics rather than preemptively adding modifiers to production code.
+In a type with `LayoutKind.Explicit` or `[ExtendedLayout]`, mark every instance field `safe` or `unsafe` (CS9392). Static and const fields are exempt. For a synthesized backing field, put the modifier on the auto-property or field-like event; a captured primary-constructor parameter or positional record member needs explicitly declared storage to annotate. Later compilers extend the rule to any type with a nonzero `StructLayoutAttribute.Pack` or `Size`; SDK 11.0.100 does not diagnose those.
 
 Audit field overlap separately. A `safe` label cannot make overlapping incompatible representations sound; it states that safe access preserves the model's invariants.
 
@@ -227,7 +267,7 @@ Use this order to avoid noisy secondary diagnostics:
 1. **Freeze the baseline.** Build and test every supported target framework and configuration before opting in.
 2. **Inventory declarations and operations.** Include generated code, reference assemblies, interop stubs, analyzers, and source generators.
 3. **Remove type-level `unsafe`.** Do this in the migration branch or condition where the updated rules are active.
-4. **Set declaration contracts.** Decide which members truly require caller proof. Align overrides, interfaces, partials, accessors, constructors, and layout fields.
+4. **Set declaration contracts.** Decide which members truly require caller proof. Align overrides, interfaces, partials, accessors, and constructors, and mark every `extern` member and layout field `safe` or `unsafe`.
 5. **Repair bodies.** Add narrow explicit blocks around remaining dereferences, indexes, invocations, and requires-unsafe calls.
 6. **Repair inward call sites.** Start near the unsafe primitive and move outward. Validate and localize where possible; propagate only genuine obligations.
 7. **Replace equivalent low-level code.** Apply span, binary, vector, and interop patterns only with correctness and performance evidence.
@@ -238,6 +278,7 @@ Use this order to avoid noisy secondary diagnostics:
 For temporary staging:
 
 - Keep updated-model evaluation in a dedicated configuration, branch, or explicit build lane.
+- Treat migrated source as preview-only source. `safe`, `unsafe(expression)`, and pointer declarations outside an unsafe context compile only with `LangVersion=preview` (CS8652 or CS0214 otherwise), so the legacy lane cannot build them. Until the feature leaves preview, keep that source on the migration branch or behind conditional compilation. An explicit `unsafe` block inside an `unsafe` member is valid in both lanes.
 - Record each remaining diagnostic by owner and reason.
 - Prefer a short-lived, narrow suppression only when the installed compiler exposes a confirmed migration mechanism.
 - Do not recommend a permanent broad opt-out, blanket `NoWarn`, broad `unsafe` wrapper, or rollback of `AllowUnsafeBlocks` as the migration result.
@@ -263,17 +304,24 @@ public static async Task<int> ReadThenPauseAsync(Memory<int> memory)
 
 Do not carry a `Span<T>`, ref local, pointer tied to a movable object, `fixed` variable, or stack allocation across `await` or `yield`. Split the method into pre-suspension and post-suspension regions, or copy the required value into ordinary managed state.
 
-Newer unsafe-evolution discussions include further async/iterator ergonomics. Treat syntax beyond C# 13 as version-sensitive and verify the installed compiler's behavior.
+**Preview language version:** `await` is allowed inside an unsafe context, `await` inside a `fixed` statement is an error (CS9398), and `yield return` in an unsafe context remains an error. The compiler does not prove that a pointer kept live across an `await` is still valid after resumption, so the rule above becomes the author's obligation rather than a diagnostic.
 
 ## Treat Metadata and Assemblies as Contracts
 
 ### Compiler metadata, not source annotation
 
-Source uses the `unsafe` keyword. The compiler represents requires-unsafe in metadata. Writing `RequiresUnsafeAttribute` directly produces CS9379.
+Source uses the `unsafe` keyword. The compiler represents requires-unsafe in metadata. Writing `RequiresUnsafeAttribute` directly produces CS9379, under legacy rules as well.
 
-Current runtime source places `RequiresUnsafeAttribute` in `System.Diagnostics.CodeAnalysis`; older design examples used `System.Runtime.CompilerServices`. The runtime attributes work is still tracked open under [#125134](https://github.com/dotnet/runtime/issues/125134), so the final name and namespace are not settled. Recheck the installed reference assemblies and [runtime metadata PR #125721](https://github.com/dotnet/runtime/pull/125721). Never hard-code a namespace, define a polyfill speculatively, or emit the attribute by hand.
+.NET 11 ships both attributes as public API ([API issue #125134](https://github.com/dotnet/runtime/issues/125134), [PR #125721](https://github.com/dotnet/runtime/pull/125721)):
 
-The module-level memory-safety rules marker is also compiler/tooling metadata. Let the installed compiler emit it from the recognized opt-in.
+- `System.Diagnostics.CodeAnalysis.RequiresUnsafeAttribute` marks a requires-unsafe constructor, event, method, or property.
+- `System.Runtime.CompilerServices.MemorySafetyRulesAttribute(int version)` is the module-level marker that an assembly was compiled under the updated rules; the compiler emits and recognizes version `2`.
+
+The language proposal's metadata section still shows an older namespace and version value; follow the shipped API. Never define a polyfill speculatively or emit either attribute by hand. Let the installed compiler emit them from the recognized opt-in.
+
+### Framework reference assemblies
+
+The .NET 11 reference assemblies already carry requires-unsafe contracts on low-level APIs, among them `Unsafe`, `MemoryMarshal`, and `GC.AllocateUninitializedArray` ([#131733](https://github.com/dotnet/runtime/pull/131733)). An opted-in project therefore gets CS9362 on a call such as `Unsafe.As<T>(object)` even when it contains no pointer code, while a legacy project compiles the same call unchanged. Use the diagnostic from the installed reference pack as the authority on which APIs are requires-unsafe. Further library annotation is tracked for .NET 12 ([#125145](https://github.com/dotnet/runtime/issues/125145)).
 
 ### Evidence for contract-risk claims
 
@@ -290,6 +338,8 @@ Cross-assembly behavior is asymmetric:
 - A new producer consumed by an old compiler therefore cannot rely on compiler enforcement of caller obligations.
 - An old producer consumed by a new compiler can produce new source diagnostics without a binary change.
 
+The conservative mode covers pointer and function-pointer types anywhere in a parameter or return type, and it applies under the `preview` language version even before the consumer opts in (CS9363). An `extern` member from a legacy assembly is not treated as requires-unsafe.
+
 Treat caller obligations as source/tooling contracts, not runtime guards. Preserve runtime validation at safe boundaries.
 
 ### Tooling and generated code
@@ -305,7 +355,9 @@ Generated code is not exempt. Audit:
 - trimming/AOT-generated paths;
 - analyzers that parse or rewrite unsafe syntax.
 
-Tools may lag compiler metadata or syntax. Compare generated source and reference assemblies, not only the implementation assembly. See [early reference-assembly rules PR #131733](https://github.com/dotnet/runtime/pull/131733) as runtime-main evidence of adoption work, not a guarantee for every SDK/tool version.
+Tools lag the compiler. As of this snapshot GenAPI does not round-trip the safety contract, ApiCompat does not compare it, and StyleCop SA1206 does not know the `safe` modifier ([#131451](https://github.com/dotnet/runtime/issues/131451)). Compare generated source and reference assemblies, not only the implementation assembly.
+
+A source generator must emit code that compiles under both rule sets: each generated body opens its own `unsafe` block, type-level `unsafe` is emitted only for legacy consumers, and `safe` or `unsafe(...)` is emitted only when the consuming compilation uses the updated rules, because both need the `preview` language version. In .NET 11 the `LibraryImport` generator ([#131245](https://github.com/dotnet/runtime/pull/131245)) and the System.Text.Json generator ([#133886](https://github.com/dotnet/runtime/pull/133886)) handle the updated rules; the fix for the COM and JavaScript interop generators ([#131701](https://github.com/dotnet/runtime/pull/131701)) is on runtime main only, so reproduce their output under the opt-in before relying on it. A generator can read `IModuleSymbol.MemorySafetyRulesVersion`, a Roslyn API still marked experimental (RSEXPERIMENTAL006). When testing a generator, also compile without `LangVersion=preview`: the preview language version alone relaxes pointer declarations and hides legacy-rule breaks.
 
 ## Investigate Diagnostics
 
@@ -318,21 +370,34 @@ Use the ordinary unsafe-code groups for the legacy model and the updated-model g
 | **CS0208, CS8500** | Pointer, address, or size operation involves a managed type. | Prove that the pointee is unmanaged/reference-free as required; do not assume layout or pinning makes a managed type valid pointer storage. |
 | **CS0211–CS0214** | Invalid address-taking/fixing shape or pointer use outside an unsafe context. | Identify the exact expression and lifetime. Add a narrow context only when the operation is intentional and `AllowUnsafeBlocks` is enabled. |
 | **CS0227** | Unsafe code not enabled. | Confirm whether the project intentionally permits unsafe source. Do not conflate `AllowUnsafeBlocks` with the updated-rule opt-in. Prefer a safe replacement when unsafe source is not part of the project contract. |
-| **CS0233** | `sizeof` use requires an unsafe context for the active language rules. | Determine whether the needed value is compiler-managed size or native marshaled size; use the matching operation rather than adding `unsafe` mechanically. |
+| **CS0233** | `sizeof` on a non-predefined type requires an unsafe context under the legacy language rules; the `preview` language version relaxes it for unmanaged types. | Determine whether the needed value is compiler-managed size or native marshaled size; use the matching operation rather than adding `unsafe` mechanically. |
 | **CS0306** and pointer/fixed-buffer constraint diagnostics | A pointer or restricted type appears where the type system does not permit it. | Redesign the generic or storage boundary; an unsafe block cannot waive generic, fixed-buffer, or managed-type restrictions. |
-| **CS9360–CS9363** | Unsafe operation, uninitialized `stackalloc` under relevant settings, requires-unsafe/extern call, or legacy pointer-signature compatibility behavior. | Find the exact operation; replace, localize with proof, or propagate the obligation. |
-| **CS9364–CS9368** | Safety-contract mismatch or metadata applicability/rule-set issue. | Align base/interface/implementation contracts and verify the producer's active rules and supported symbols. |
-| **CS9376** | Implicit requires-unsafe constructor use through `new()` constraints. | Inspect generic construction and constructor contracts; do not hide the call through a generic helper. |
-| **CS9377** | `unsafe` has no effect under the active rules. | Remove meaningless syntax or relocate the contract/context after verifying intent. |
-| **CS9379** | Direct source use of compiler metadata. | Remove the attribute and express the source contract with supported syntax. |
-| **CS9388–CS9390** | Moving `safe`/`unsafe` rules for extern and partial declarations. | Make extern intent explicit and keep partial declarations consistent under the installed compiler. |
-| **CS9392** | Explicit/extended-layout field classification. | Classify each affected field using the compiler-supported syntax, then audit overlap and representation. |
+| **CS8652** | The updated-rules opt-in or preview syntax is used without the `preview` language version. | Set `LangVersion` to `preview` in the evaluation lane only; do not change the production language version to silence it. |
+| **CS9360** | An operation that remains unsafe (dereference, pointer member access or indexing, fixed-buffer element access, function-pointer invocation) is outside an unsafe context, including inside the body of an `unsafe` member. | Add the narrowest block or `unsafe(expression)` with its proof, or replace the operation. |
+| **CS9361** | A `stackalloc` converted to a span has no initializer inside a `[SkipLocalsInit]` member. | Give the `stackalloc` an initializer; clearing or writing it afterwards does not satisfy the rule. Otherwise wrap the allocation in an unsafe context with proof that every byte is written before it is read. Pointer-typed `stackalloc` is unaffected. The rule may be withdrawn ([roslyn#86293](https://github.com/dotnet/roslyn/issues/86293)). |
+| **CS9362** | A member marked `unsafe` is used from a safe context: a call, a constructor, or a field read or write. | Replace, localize with proof, or propagate the obligation. |
+| **CS9363** | A member with pointers in its signature, compiled under legacy rules, is used from a safe context. Fires under the `preview` language version even without the opt-in. | Treat it like CS9362; no contract was published, so audit the callee. This includes members of the current project when only `LangVersion=preview` is set. |
+| **CS9364–CS9366** | An `unsafe` member overrides, implicitly implements, or explicitly implements a safe member. | Align the hierarchy; never strengthen a safe base or interface contract in an implementation. |
+| **CS9376** | A type with an `unsafe` parameterless constructor is used to satisfy a `new()` or `struct` constraint. | In an expression, use an unsafe context. In a declaration position (base type, field type, alias) no block can help; redesign the constructor contract. |
+| **CS9377** | `unsafe` appears on a type, static constructor, finalizer, or delegate. | Remove the modifier and classify members individually. |
+| **CS9379** | `RequiresUnsafeAttribute` is written in source (reported under legacy rules too). | Remove the attribute and use the `unsafe` modifier. |
+| **CS9388** | `safe` and `unsafe` are combined on one declaration. | Choose one after auditing the declaration. |
+| **CS9389** | An `extern` member is marked neither `safe` nor `unsafe`. SYSLIB1064 is the `LibraryImport` generator's equivalent. | Audit the native contract, then state it explicitly. |
+| **CS9390** | The parts of a partial member disagree on `safe`. | Make both declarations match, including generated parts. |
+| **CS9392** | An instance field in an explicit- or extended-layout type (later compilers: also nonzero `Pack` or `Size`) is marked neither `safe` nor `unsafe`. | Classify each field, then audit overlap and representation. |
+| **CS9396, CS9397** | `safe`/`unsafe` is on both a property and its accessor, or repeated on every accessor. | Put the modifier on the property, or on the one accessor that differs. |
+| **CS9398** | `await` appears inside a `fixed` statement. | End the pin before suspending; copy or use owned memory across the `await`. |
+| **CS9401** (later compilers) | A `safe` or `unsafe` declaration modifier is used without `AllowUnsafeBlocks`. | Enable unsafe code only where the project contract allows it; drop `safe` where it is not required. |
+| **CS9402** (later compilers, warning) | The `updated-memory-safety-rules` feature flag is deprecated. | Switch the evaluation lane to `MemorySafetyRulesVersion` once the installed compiler recognizes it. |
+| **CS9403** (later compilers) | Address-of is applied to a variable that is not definitely assigned. | Assign first, or use an unsafe context with proof that the pointee is written before it is read. |
+
+In an SDK 11.0.100 check, the body diagnostics CS9360–CS9362 appeared only after the declaration errors CS9377, CS9389, CS9392, and CS9396 were fixed, so expect a second wave after the declarations compile. The Learn index also lists CS9367 and CS9368; the compiler no longer defines them.
 
 Treat every diagnostic as blocking until resolved or explicitly staged. Never add a blanket suppression, expand an unsafe scope around unrelated code, or disable the model to declare success.
 
 ## Set Up and Evaluate with the Current SDK
 
-Use the installed SDK's supported mechanism. This XML is only a version-sensitive example and may not match the current property spelling:
+Use the installed SDK's supported mechanism. In the .NET 11 SDK (11.0.100) the opt-in is two settings, shown here in a dedicated evaluation configuration:
 
 ```xml
 <PropertyGroup Condition="'$(Configuration)' == 'MemorySafetyEvaluation'">
@@ -341,11 +406,13 @@ Use the installed SDK's supported mechanism. This XML is only a version-sensitiv
 </PropertyGroup>
 ```
 
-The [SDK design](https://github.com/dotnet/designs/blob/main/accepted/2025/memory-safety/sdk-memory-safety-enforcement.md) also describes a versioned property such as `MemorySafetyRules`. Confirm the installed SDK's recognized property and value; do not copy a numeric value into production configuration.
+The `preview` language version enables the new syntax and the pointer relaxations; the feature flag enables the updated rules and the module marker. The flag without the preview language version fails with CS8652. A file-based program uses the equivalent directives, `#:property LangVersion=preview` and `#:property Features=$(Features);updated-memory-safety-rules`.
+
+Later compilers (Roslyn 18.14, after 11.0.100) add an MSBuild property and compiler option: `<MemorySafetyRulesVersion>2</MemorySafetyRulesVersion>` or `-memorysafetyrulesversion:2`, where `1` is the legacy default ([roslyn#85980](https://github.com/dotnet/roslyn/pull/85980)). They still require the preview language version, and they warn CS9402 when the feature flag is used. SDK 11.0.100 silently ignores the property and rejects the compiler option (CS2007), so a project that sets only the property there is not opted in. The [SDK design](https://github.com/dotnet/designs/blob/main/accepted/2025/memory-safety/sdk-memory-safety-enforcement.md) and Microsoft Learn call the planned stable property `MemorySafetyRules`; the name that ships when the feature leaves preview is not settled.
 
 Before enabling the updated model:
 
-1. Confirm the compiler recognizes the setting rather than silently ignoring it.
+1. Confirm the compiler recognizes the setting rather than silently ignoring it: an unmarked `extern` member or a type-level `unsafe` must produce CS9389 or CS9377, and the output module must carry `MemorySafetyRulesAttribute`.
 2. Capture `dotnet --info` and the effective compiler command line or binlog.
 3. Keep the normal supported build unchanged and green.
 4. Run the evaluation lane over all relevant source, including generated files.
@@ -379,17 +446,23 @@ Use primary sources in this order:
 
 - [Improving C# memory safety (.NET blog)](https://devblogs.microsoft.com/dotnet/improving-csharp-memory-safety/)
 - [Updated memory-safety model (preview) on Microsoft Learn](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/unsafe-code#the-updated-memory-safety-model-preview)
+- [Enable the updated memory safety rules (compiler options)](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/compiler-options/language#enable-the-updated-memory-safety-rules)
+- [`safe` keyword](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/safe)
+- [`<safety>` documentation tag](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/xmldoc/recommended-tags#safety)
+- [What's new in C# 15: memory safety](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-15#memory-safety)
 - [Unsafe code compiler diagnostics](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/compiler-messages/unsafe-code-errors)
+- Roslyn compiler breaking changes for [.NET 11](https://github.com/dotnet/roslyn/blob/main/docs/compilers/CSharp/Compiler%20Breaking%20Changes%20-%20DotNet%2011.md) and [after 11.0.100](https://github.com/dotnet/roslyn/blob/main/docs/compilers/CSharp/Compiler%20Breaking%20Changes%20-%20DotNet%2012.md)
 - [Active champion issue #9704](https://github.com/dotnet/csharplang/issues/9704)
-- [Active unsafe evolution proposal](https://github.com/dotnet/csharplang/blob/main/proposals/unsafe-evolution.md)
+- [Active unsafe evolution proposal](https://github.com/dotnet/csharplang/blob/main/proposals/unsafe-evolution.md) (its metadata section lags the shipped API)
 - [SDK memory-safety enforcement design](https://github.com/dotnet/designs/blob/main/accepted/2025/memory-safety/sdk-memory-safety-enforcement.md)
 - [Earlier caller-unsafe design](https://github.com/dotnet/designs/blob/main/accepted/2025/memory-safety/caller-unsafe.md)
-- [Runtime metadata PR #125721](https://github.com/dotnet/runtime/pull/125721)
-- [Memory Safety v2 Tracking Issue #125800](https://github.com/dotnet/runtime/issues/125800) (open; the updated model previews in .NET 11 RC1, with full adoption tracked under milestone 12.0.0)
-- [Unsafe evolution attributes tracking issue #125134](https://github.com/dotnet/runtime/issues/125134)
-- [CoreLib `safe` placement / `<safety>` audit PR #131719](https://github.com/dotnet/runtime/pull/131719)
-- [Early reference-assembly rules PR #131733](https://github.com/dotnet/runtime/pull/131733)
+- [Runtime metadata PR #125721](https://github.com/dotnet/runtime/pull/125721) and [attributes API issue #125134](https://github.com/dotnet/runtime/issues/125134) (closed; shipped in .NET 11)
+- [Memory Safety v2 Tracking Issue #125800](https://github.com/dotnet/runtime/issues/125800) (open, milestone 12.0.0; .NET 11 ships the model as an opt-in preview)
+- [Unsafe-v2 migration tooling tracking issue #131451](https://github.com/dotnet/runtime/issues/131451)
+- [CoreLib `safe` placement / `<safety>` audit PR #131719](https://github.com/dotnet/runtime/pull/131719) and [reference-assembly rules PR #131733](https://github.com/dotnet/runtime/pull/131733), both in .NET 11
+- [`LibraryImport` generator support PR #131245](https://github.com/dotnet/runtime/pull/131245)
 - [Roslyn implementation PR #82547](https://github.com/dotnet/roslyn/pull/82547)
 - [Roslyn test plan issue #81207](https://github.com/dotnet/roslyn/issues/81207)
+- [Roslyn `MemorySafetyRulesVersion` property PR #85980](https://github.com/dotnet/roslyn/pull/85980)
 - [What's new in C# 13](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-13)
 - [C# 13 ref/unsafe in async and iterators specification](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/proposals/csharp-13.0/ref-unsafe-in-iterators-async)

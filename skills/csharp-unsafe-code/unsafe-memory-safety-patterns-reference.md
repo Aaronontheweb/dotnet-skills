@@ -79,6 +79,8 @@ Keep the step constant and the guard structurally obvious. Avoid repeatedly reco
 
 A span rewrite improves local reasoning but may add bounds checks, alter vectorization, or change inlining. Each indexing or slicing operation carries a range check until the JIT proves the loop guard dominates the access; refactoring can also change the range facts or inlining budget that make that proof visible. Representative runtime work includes [#127382](https://github.com/dotnet/runtime/pull/127382), [#127388](https://github.com/dotnet/runtime/pull/127388), and [#129625](https://github.com/dotnet/runtime/pull/129625). Treat each PR as evidence for a pattern in its specific runtime-main context; note that #127388 closed without merge at this snapshot.
 
+A bounded rewrite also finds bugs. The `string.Join` change in [#134529](https://github.com/dotnet/runtime/pull/134529) replaced unchecked offset arithmetic with one destination span sized to the allocation, which closed a buffer overrun reachable when the input mutates concurrently. On runtime main the JIT keeps removing the cost: later work folds `Span.Slice` and `Vector128.Create(span)` length checks in vectorized loops ([#135739](https://github.com/dotnet/runtime/pull/135739), [#136615](https://github.com/dotnet/runtime/pull/136615)), and [#138124](https://github.com/dotnet/runtime/pull/138124), with its own JIT change, deleted hand-written slicing tricks from `Span` itself. Those JIT changes are .NET 12 work, so measure on the runtime you ship on.
+
 ## Read and Write Binary Representations Explicitly
 
 ### Prefer BinaryPrimitives for wire formats
@@ -151,18 +153,18 @@ Do not interchange these operations:
 
 | Operation | Meaning | Constraints and review |
 | --- | --- | --- |
-| `sizeof(T)` | Compiler-defined size of `T`'s managed storage representation. | Built-in types have long-standing safe cases. Under legacy rules, general generic use is limited to unmanaged `T` and requires an unsafe context. Updated compilers may also accept some possibly managed type parameters without one; this is version-sensitive. It does not describe custom marshaling. |
+| `sizeof(T)` | Compiler-defined size of `T`'s managed storage representation. | Built-in types have long-standing safe cases. Under the legacy language rules, any other unmanaged type requires an unsafe context (CS0233). The `preview` language version makes `sizeof` on any unmanaged type safe, whether or not the assembly opts in to the updated rules. It does not describe custom marshaling. |
 | `Unsafe.SizeOf<T>()` | Size of `T` as represented in managed storage, exposed through a low-level API. | Does not mean native marshaled size. Audit low-level API contracts and generic/reference-containing cases. |
 | `Marshal.SizeOf<T>()` | Size of the unmanaged representation used by marshaling rules. | Can differ because of layout, packing, character/Boolean marshaling, or custom marshaling; may reject unsupported types. |
 
-An installed compiler implementing the updated rules may allow an unmanaged generic use without a lexical unsafe context:
+Under the `preview` language version, an unmanaged generic use needs no lexical unsafe context:
 
 ```csharp
 public static int ManagedUnmanagedSize<T>() where T : unmanaged
     => sizeof(T);
 ```
 
-For a possibly managed type parameter, do not infer the same result from this example: compile against every supported SDK and target framework. Runtime-main PR [#130727](https://github.com/dotnet/runtime/pull/130727) is evidence that runtime source adopted `sizeof` during unsafe-reduction work; it does **not** establish released compiler/API availability for a user's SDK.
+For a possibly managed type parameter, do not infer the same result from this example: the documentation covers unmanaged types only, so compile against every supported SDK and target framework. Runtime PR [#130727](https://github.com/dotnet/runtime/pull/130727), which shipped in .NET 11, shows runtime source adopting `sizeof` during unsafe-reduction work. A project on the default C# 15 language version still gets CS0233 for the same code.
 
 For native structs, verify `StructLayout`, `FieldOffset`, `Pack`, fixed buffers, nested layout, platform pointer width, and the native compiler's ABI. Add layout tests for every supported architecture when the value crosses an interop boundary.
 
@@ -233,7 +235,7 @@ public static uint ComputeChecksum(ReadOnlySpan<byte> source)
 }
 ```
 
-This safe-callable wrapper is justified only while that native contract holds; a retaining, asynchronous, or writing API requires a different ownership design. The example requires `AllowUnsafeBlocks` and compiles under the legacy model. The call site's block—not a member modifier—makes the proof boundary visible and also follows the updated model's explicit-region rule.
+This safe-callable wrapper is justified only while that native contract holds; a retaining, asynchronous, or writing API requires a different ownership design. The example requires `AllowUnsafeBlocks` and compiles under the legacy model. The call site's block—not a member modifier—makes the proof boundary visible and also follows the updated model's explicit-region rule. Under the updated rules the `extern` declaration must additionally be marked `unsafe` (CS9389), because the native code dereferences the pointer it receives.
 
 Use this approach for downlevel target frameworks that lack an equivalent safe overload. Keep conditional code target-specific only when API availability actually differs. Runtime System.Text.Json work in [#114154](https://github.com/dotnet/runtime/pull/114154) and [#114490](https://github.com/dotnet/runtime/pull/114490) provides representative examples of reducing rather than pretending to eliminate every unsafe region.
 
@@ -267,7 +269,7 @@ Span<byte> scratch = stackalloc byte[64];
 scratch.Clear();
 ```
 
-Or use a complete initializer and prove that all elements are assigned before read. Review padding and tail bytes, not only logical fields. Be especially strict under `SkipLocalsInit`; the updated rules may require an unsafe context for uninitialized `stackalloc`.
+Or use a complete initializer and prove that all elements are assigned before read. Review padding and tail bytes, not only logical fields. Be especially strict under `SkipLocalsInit`: under the updated rules, a span-typed `stackalloc` without an initializer in a `[SkipLocalsInit]` member requires an unsafe context (CS9361). The rule is syntactic: SDK 11.0.100 reports it even when the next statement calls `Clear()`, so in such a member use an initializer or an unsafe context with the proof.
 
 Bound stack allocations. Reject or switch to pooled/heap storage for attacker-controlled or large lengths to avoid stack exhaustion. Runtime PR [#110864](https://github.com/dotnet/runtime/pull/110864) hardens stackallocs with upper and lower bound checks using `(uint)` casts to handle negative or overflowing lengths.
 
@@ -301,7 +303,7 @@ Audit generated signatures and native headers together:
 - callback calling convention, rooting, lifetime, and exception behavior;
 - platform-specific layout and architecture.
 
-Under the updated model, interop declarations and generated code may acquire explicit safety contracts. Do not assume generation exempts them from diagnostics. Scope that caution to the declarations under audit; do not extend it by analogy to unrelated attributed or generated patterns.
+Under the updated model, every `extern` declaration, including a `[LibraryImport]` partial method, must be marked `safe` or `unsafe` (CS9389, SYSLIB1064); the generator mirrors the modifier onto its wrapper. Mark a declaration `safe` only after auditing what the native side does with every argument. Mark it `unsafe` when native code dereferences a caller-supplied pointer or depends on a lifetime the caller holds. `LibraryImport` needs `AllowUnsafeBlocks` under both rule sets. Scope these rules to the declarations under audit; do not extend them by analogy to unrelated attributed or generated patterns.
 
 ### Treat UnsafeAccessor as a visibility boundary, not a memory hazard
 
@@ -310,6 +312,8 @@ Under the updated model, interop declarations and generated code may acquire exp
 Audit it for what can actually break: contract drift when the target member is renamed or removed across dependency versions, the signature-precision rules for generics, and encapsulation invariants the target type relied on. It was designed as the AOT- and trimming-safe replacement for reflection-based access to non-public members (runtime proposal #81741; generic support in #99468).
 
 Do not classify it as a requires-unsafe candidate, or flag it under the updated model, based on its name or on generic generated-code cautions. Do so only with SDK evidence: the installed reference assemblies, the active design sources, or a reproduced diagnostic.
+
+That evidence now exists for one rule. An accessor is an `extern` member, so under the updated rules it must be marked `safe` or `unsafe` like any other (CS9389). `safe` matches the analysis above when the exposed member carries no memory-safety invariant of its own, and it is what the System.Text.Json source generator emits for its accessors ([#133886](https://github.com/dotnet/runtime/pull/133886)). Keep the accessor `unsafe` when it reaches a member the target type itself treats as `unsafe`.
 
 ### Treat IntPtr and nint as pointer-smuggling
 
@@ -372,6 +376,8 @@ Use this decision sequence:
 
 Runtime PR [#127539](https://github.com/dotnet/runtime/pull/127539) records UniqueId/XML unsafe-reduction work and the decision to revert some candidate safe rewrites after performance regressions. TextInfo repeats the cycle at a smaller scale: [#122116](https://github.com/dotnet/runtime/pull/122116) reduced unsafe usage and was reverted by [#123692](https://github.com/dotnet/runtime/pull/123692) while [#123667](https://github.com/dotnet/runtime/issues/123667) was investigated. JIT-side follow-ups later absorbed part of that cost: [#127433](https://github.com/dotnet/runtime/pull/127433) excluded `[Intrinsic]` callees from the inliner time budget and [#129397](https://github.com/dotnet/runtime/pull/129397) unpinned locals whose values are provably non-movable. Use all of this as evidence to measure, not as permission to keep unreviewed unsafe code.
 
+Measure the input distribution before porting an unsafe fast path. Runtime PRs [#134857](https://github.com/dotnet/runtime/pull/134857) and [#134991](https://github.com/dotnet/runtime/pull/134991) deleted vectorized `ref`/`Unsafe` UTF-8 comparison code in favor of a safe scalar or SWAR loop because real inputs were short, and the first of them exposed latent out-of-range span bugs in the code it replaced.
+
 ## Avoid Common Unsafe Substitutions
 
 | Anti-pattern | Safer alternative |
@@ -390,7 +396,8 @@ Runtime PR [#127539](https://github.com/dotnet/runtime/pull/127539) records Uniq
 | Put a low-level call in a safe wrapper without validating its contract. | Validate every invariant or propagate an honest requires-unsafe contract. |
 | Use broad `#pragma`, `NoWarn`, or disable the updated model. | Resolve each diagnostic by replacement, localization, or propagation; stage only narrow temporary exceptions. |
 | Apply `RequiresUnsafeAttribute` in source or copy a proposal namespace. | Use supported `unsafe` syntax and let the compiler emit metadata. |
-| Add a `safe` placement or a `<safety>` comment without a real audit, or treat them as runtime guards. | Reserve `safe` for the declarations that require it (explicit/extended-layout struct fields, `extern`); back a `<safety>` comment with an actual proof — the tools skip conservative `unsafe`, but the invariant must still hold. |
+| Mark an `extern` member or layout field `safe` to clear CS9389/CS9392 without auditing it, or leave a `// SAFETY: To be audited` placeholder as the proof. | Audit the native contract or field overlap first and choose `unsafe` when the caller controls soundness. Write `safe` only where it is required, and replace every placeholder with a verifiable invariant. |
+| Set `MemorySafetyRulesVersion`, or only `LangVersion=preview`, and assume the updated rules are active. | Confirm with a canary diagnostic or the module's `MemorySafetyRulesAttribute`. SDK 11.0.100 recognizes only the feature flag together with the `preview` language version. |
 | Keep a pointer/span/ref after returning an array or arena block to a pool. | End all borrows before return and prevent callbacks/tasks from retaining them. |
 | Assume reflection, `dynamic`, or a delegate preserves compiler safety contracts. | Validate at runtime boundaries and test indirect invocation paths. |
 | Infer a requires-unsafe or memory-safety risk from an API's name — treating `UnsafeAccessor` like `Unsafe.As`. | Classify by hazard capability using runtime semantics: validated visibility binding fails closed; type-confusion and unchecked-offsetting primitives do not. Verify contract claims against the installed SDK. |
@@ -423,7 +430,24 @@ Keep only applicable lines. Prefer a concise single line when one invariant suff
 
 Do not write `// SAFETY: this is safe`, restate syntax, cite passing tests as the proof, or omit a caller-controlled precondition. Update the comment when the code or native contract changes.
 
-For a requires-unsafe public member, document caller obligations in API documentation as well as the implementation's `SAFETY` comment. The member contract tells callers what they must guarantee; the block comment explains why the implementation operation is valid at that point.
+For a requires-unsafe member, document caller obligations in a `<safety>` XML documentation element as well as the implementation's `SAFETY` comment. The member contract tells callers what they must guarantee; the block comment explains why the implementation operation is valid at that point.
+
+```csharp
+/// <summary>Reads one 32-bit value from unmanaged memory.</summary>
+/// <safety>
+/// <paramref name="source"/> must point to at least four readable bytes that stay valid for the call.
+/// </safety>
+public static unsafe int Read(byte* source)
+{
+    // SAFETY: the caller guarantees four readable bytes; ReadUnaligned imposes no alignment requirement.
+    unsafe
+    {
+        return System.Runtime.CompilerServices.Unsafe.ReadUnaligned<int>(source);
+    }
+}
+```
+
+The compiler does not check either form. A fixer placeholder such as `// SAFETY: To be audited` marks unfinished work, not a proof.
 
 ## Apply the Review Rubric
 
@@ -431,7 +455,7 @@ Approve a low-level change only when each applicable item has concrete evidence.
 
 ### Declaration and boundary
 
-- Identify the active legacy, C# 13, or updated rule set.
+- Identify the active rule set: legacy, C# 13, preview language without the opt-in, or updated.
 - Justify remove/localize/propagate for every changed unsafe declaration.
 - Keep public, virtual, interface, partial, delegate, and generated contracts aligned.
 - Confirm a safe-callable wrapper validates all caller-controlled conditions.
@@ -506,26 +530,36 @@ Start with authoritative guidance:
 - [Unsafe code best practices](https://learn.microsoft.com/en-us/dotnet/standard/unsafe-code/best-practices)
 - [Updated memory-safety model (preview)](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/unsafe-code#the-updated-memory-safety-model-preview)
 - [Improving C# memory safety (.NET blog)](https://devblogs.microsoft.com/dotnet/improving-csharp-memory-safety/)
-- [Runtime adoption tracking issue #125800](https://github.com/dotnet/runtime/issues/125800)
-- [Merged runtime PR search for “reduce unsafe”](https://github.com/dotnet/runtime/pulls?q=is%3Apr+is%3Amerged+%22reduce+unsafe%22)
+- [Memory Safety v2 tracking issue #125800](https://github.com/dotnet/runtime/issues/125800)
+- [Merged runtime PRs labeled `reduce-unsafe`](https://github.com/dotnet/runtime/pulls?q=is%3Apr+is%3Amerged+label%3Areduce-unsafe), which finds more than the [“reduce unsafe” text search](https://github.com/dotnet/runtime/pulls?q=is%3Apr+is%3Amerged+%22reduce+unsafe%22)
 
 Use representative runtime PRs as implementation evidence, not universal prescriptions:
 
 | Pattern | Pull requests |
 | --- | --- |
-| Span slicing and bounded traversal | [#127382](https://github.com/dotnet/runtime/pull/127382), [#127388](https://github.com/dotnet/runtime/pull/127388), [#129625](https://github.com/dotnet/runtime/pull/129625) |
+| Span slicing and bounded traversal | [#127382](https://github.com/dotnet/runtime/pull/127382), [#127388](https://github.com/dotnet/runtime/pull/127388), [#129625](https://github.com/dotnet/runtime/pull/129625), [#134529](https://github.com/dotnet/runtime/pull/134529) |
 | Explicit binary/primitive reads and writes | [#127485](https://github.com/dotnet/runtime/pull/127485), [#127913](https://github.com/dotnet/runtime/pull/127913), [#127921](https://github.com/dotnet/runtime/pull/127921), [#127394](https://github.com/dotnet/runtime/pull/127394), [#125039](https://github.com/dotnet/runtime/pull/125039) |
-| `sizeof` unsafe-reduction evidence on runtime main | [#130727](https://github.com/dotnet/runtime/pull/130727) |
+| `sizeof` unsafe-reduction evidence | [#130727](https://github.com/dotnet/runtime/pull/130727) |
 | Vector creation from spans | [#127456](https://github.com/dotnet/runtime/pull/127456), [#127845](https://github.com/dotnet/runtime/pull/127845), [#127846](https://github.com/dotnet/runtime/pull/127846) |
-| `fixed` buffers replaced with `[InlineArray]` structs | [#125514](https://github.com/dotnet/runtime/pull/125514), [#125574](https://github.com/dotnet/runtime/pull/125574) |
+| `fixed` buffers replaced with `[InlineArray]` structs | [#125514](https://github.com/dotnet/runtime/pull/125514), [#125574](https://github.com/dotnet/runtime/pull/125574), [#134877](https://github.com/dotnet/runtime/pull/134877) (fixed-buffer fallback kept for downlevel targets) |
 | `PointerMemoryManager` replaced with ref-struct/span decoders | [#125681](https://github.com/dotnet/runtime/pull/125681), [#125854](https://github.com/dotnet/runtime/pull/125854) |
 | Pointer parsing replaced with span `Parse`/`TryParse` | [#125640](https://github.com/dotnet/runtime/pull/125640), [#102144](https://github.com/dotnet/runtime/pull/102144) |
 | Needless `Unsafe.As` / `GetArrayDataReference` removed | [#118655](https://github.com/dotnet/runtime/pull/118655), [#122132](https://github.com/dotnet/runtime/pull/122132) |
+| Pointer and `Unsafe` forms replaced with span constructors, indexing, span-based SIMD, and `Overlaps` | [#134956](https://github.com/dotnet/runtime/pull/134956) |
+| Unsafe SIMD path replaced with a safe scalar or SWAR loop for short inputs | [#134857](https://github.com/dotnet/runtime/pull/134857), [#134991](https://github.com/dotnet/runtime/pull/134991) |
 | Stackalloc bounds hardening | [#110864](https://github.com/dotnet/runtime/pull/110864) |
 | Interop marshalling cleanup | [#118862](https://github.com/dotnet/runtime/pull/118862) |
-| Unsafe-v2 `safe` placement and `<safety>` audit comments | [#131719](https://github.com/dotnet/runtime/pull/131719) |
+| Unsafe-v2 `safe` placement and `<safety>` audit comments | [#131719](https://github.com/dotnet/runtime/pull/131719), [#131245](https://github.com/dotnet/runtime/pull/131245), [#134134](https://github.com/dotnet/runtime/pull/134134) |
+| Unsafe-v2 source-generator output | [#131701](https://github.com/dotnet/runtime/pull/131701), [#133886](https://github.com/dotnet/runtime/pull/133886) |
+| Unsafe-v2 migration tooling and library enrollment | [#135341](https://github.com/dotnet/runtime/pull/135341), [#136621](https://github.com/dotnet/runtime/pull/136621), [#136657](https://github.com/dotnet/runtime/pull/136657), [#138081](https://github.com/dotnet/runtime/pull/138081) |
 | Narrow unavoidable unsafe on downlevel paths | [#114154](https://github.com/dotnet/runtime/pull/114154), [#114490](https://github.com/dotnet/runtime/pull/114490) |
 | Performance-driven retention/reversion | [#127539](https://github.com/dotnet/runtime/pull/127539); [#122116](https://github.com/dotnet/runtime/pull/122116) reverted by [#123692](https://github.com/dotnet/runtime/pull/123692) |
-| JIT-side cost absorption (inliner budget, unpinning) | [#127433](https://github.com/dotnet/runtime/pull/127433), [#129397](https://github.com/dotnet/runtime/pull/129397) |
+| JIT-side cost absorption (inliner budget, unpinning, slice range checks) | [#127433](https://github.com/dotnet/runtime/pull/127433), [#129397](https://github.com/dotnet/runtime/pull/129397), [#135739](https://github.com/dotnet/runtime/pull/135739), [#136615](https://github.com/dotnet/runtime/pull/136615), [#138124](https://github.com/dotnet/runtime/pull/138124) |
 
-Check each PR's merge state, final diff, target branch, benchmark evidence, and later follow-up before copying a pattern. At this snapshot, #127388 is closed without merge; its discussion remains representative but not adopted runtime code. #131719 documents the unsafe-v2 migration surface (`safe` placement and `<safety>` comments), not a runtime technique — recheck the installed compiler's syntax before asserting the exact form. The JIT-side rows are compiler behavior, not source patterns: #127433 excludes `[Intrinsic]` callees from the inliner budget and #129397 unpins locals whose values are provably non-movable, both absorbing cost from span/vector rewrites.
+Check each PR's merge state, final diff, target branch, benchmark evidence, and later follow-up before copying a pattern. At this snapshot, #127388 is closed without merge; its discussion remains representative but not adopted runtime code.
+
+The `release/11.0` branch forked from main in mid-August 2026, so a PR merged after that is .NET 12 work unless it was backported. Of the later rows, #133886 and the audit in #134134 (through its backport) shipped in .NET 11.
+
+The unsafe-v2 rows document the migration surface and process, not a runtime technique. On main, `src/libraries` now defaults to the updated rules with large assemblies such as CoreLib still opted out (#138081), and the first enrolled library was migrated mechanically with its safety comments still to be written (#136657).
+
+The JIT-side rows are compiler behavior, not source patterns. They absorb cost from span and vector rewrites, and the three newest are on main only.
